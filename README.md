@@ -4,6 +4,14 @@ A Zellij status bar plugin that replaces the default tab bar with Claude Code ac
 
 ![Zellaude status bar example](assets/bar-example.svg)
 
+> **This is a fork of [`ishefi/zellaude`](https://github.com/ishefi/zellaude) that adds one opt-in feature: "Tab titles".** It is proposed upstream as [PR #14](https://github.com/ishefi/zellaude/pull/14); until that lands, this fork ships a prebuilt binary you can use today (see [Install](#install)). Everything else below is upstream's feature set, unchanged.
+
+## What this fork adds
+
+**Tab titles** (opt-in, default off). When enabled from the settings menu, each Claude tab is renamed to its pane's `PaneInfo.title`, the OSC title the program in that pane sets. Paired with a Claude Code hook that emits a short OSC title per task, this gives iTerm-style content-based tab labels. The setting persists to `~/.config/zellij/plugins/zellaude.json`.
+
+Gotcha: never run `rename-pane` on these panes. Zellij then stops honouring their OSC titles and tab-title sync silently stops working.
+
 ## Features
 
 - **Full tab bar** — shows all Zellij tabs (not just Claude sessions), replacing the native tab bar
@@ -59,7 +67,7 @@ Add the plugin to your Zellij layout — that's it:
 ```kdl
 default_tab_template {
     pane size=1 borderless=true {
-        plugin location="https://github.com/ishefi/zellaude/releases/latest/download/zellaude.wasm"
+        plugin location="https://github.com/rebelthor/zellaude/releases/latest/download/zellaude.wasm"
     }
     children
 }
@@ -72,7 +80,7 @@ On first load, the plugin automatically installs the hook script and registers i
 Prerequisites: [Rust](https://rustup.rs) (in addition to the above)
 
 ```bash
-git clone https://github.com/ishefi/zellaude.git
+git clone https://github.com/rebelthor/zellaude.git
 cd zellaude
 ./install.sh
 ```
