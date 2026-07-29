@@ -180,6 +180,9 @@ pub struct State {
     pub prefix_click_region: Option<(usize, usize)>,
     pub menu_click_regions: Vec<MenuClickRegion>,
     pub config_loaded: bool,
+    /// Bounded retry state for the config load; see the `Event::Timer` arm.
+    pub config_load_attempts: u8,
+    pub last_config_load_ts: u64,
     pub hooks_installed: bool,
     /// In-flight tab renames, keyed by the tab name observed when the rename was
     /// issued. See `PendingRename` and `apply_tab_titles`.

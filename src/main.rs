@@ -20,6 +20,10 @@ const MAX_TAB_TITLE: usize = 40;
 const RENAME_COOLDOWN_MS: u64 = 400;
 /// How many times a single desired rename is re-issued before being abandoned.
 const RENAME_MAX_ATTEMPTS: u8 = 3;
+/// Gap between config-load retries while the load keeps failing.
+const CONFIG_LOAD_RETRY_SECS: u64 = 5;
+/// How many config-load retries before giving up until the next reload.
+const CONFIG_LOAD_MAX_ATTEMPTS: u8 = 12;
 
 /// Strip control characters and clamp length before using a pane title as a tab
 /// name. The status bar truncates further for display; this just bounds it.
@@ -164,6 +168,11 @@ impl ZellijPlugin for State {
                             self.settings = settings;
                         }
                         self.config_loaded = true;
+                        // Settings just arrived, so a setting that gates
+                        // behaviour (e.g. tab_titles) may have flipped from its
+                        // default. Apply now rather than waiting for the next
+                        // tab/pane update.
+                        self.apply_tab_titles();
                         true
                     }
                     Some("install_hooks") => {
@@ -174,6 +183,34 @@ impl ZellijPlugin for State {
                 }
             }
             Event::Timer(_) => {
+                // Keep retrying the config load until it lands.
+                //
+                // `load_config` goes through `run_command`, which silently
+                // no-ops while the `RunCommands` permission is denied — no
+                // `RunCommandResult` is ever delivered, so `config_loaded`
+                // stays false and `self.settings` stays at `Default`. That
+                // silently disables every persisted setting (notably
+                // `tab_titles`, which defaults off), with no signal beyond a
+                // line in zellij's own log. `RunCommands` starts denied
+                // whenever the grant is missing or stale for this plugin path,
+                // and `PermissionRequestResult` does not fire in that case, so
+                // the timer is the only reliable place to recover.
+                //
+                // Bounded and slow on purpose: each blocked attempt makes zellij
+                // log a denial, and the timer fires ~1/sec per plugin instance.
+                // Retrying unconditionally would spam the server log at exactly
+                // the rate that made the rename loop so damaging. A handful of
+                // spaced attempts is enough to catch a grant that arrives
+                // shortly after load; past that, only a reload will help.
+                if !self.config_loaded
+                    && self.config_load_attempts < CONFIG_LOAD_MAX_ATTEMPTS
+                    && unix_now().saturating_sub(self.last_config_load_ts)
+                        >= CONFIG_LOAD_RETRY_SECS
+                {
+                    self.config_load_attempts = self.config_load_attempts.saturating_add(1);
+                    self.last_config_load_ts = unix_now();
+                    self.load_config();
+                }
                 let stale_changed = self.cleanup_stale_sessions();
                 let flash_changed = self.cleanup_expired_flashes();
                 let has_flashes = self.has_active_flashes();
@@ -327,18 +364,20 @@ impl State {
             return;
         }
 
-        // Pick the most recently active Claude session per tab as the title source.
-        let mut best: HashMap<usize, &SessionInfo> = HashMap::new();
-        for session in self.sessions.values() {
-            if let Some(idx) = session.tab_index {
-                let replace = best
-                    .get(&idx)
-                    .map_or(true, |cur| session.last_event_ts >= cur.last_event_ts);
-                if replace {
-                    best.insert(idx, session);
-                }
-            }
-        }
+        // Choose the pane whose title each tab should mirror.
+        //
+        // Driven by the pane manifest, NOT by `self.sessions`. `sessions` is
+        // populated purely by Claude Code hook events, so it is empty until a
+        // hook fires — notably after a server restart, where panes are
+        // resurrected from the serialized layout and no hook has run yet. Gating
+        // renames on `sessions` therefore left every tab stuck at `Tab #N` while
+        // the titles sat in the manifest, unused. The manifest is the actual
+        // source of truth for pane titles, so use it directly and treat session
+        // activity as a tiebreak only.
+        let title_source: HashMap<usize, u32> = match self.pane_manifest {
+            Some(ref manifest) => tab_pane_map::pick_title_panes(manifest, &self.sessions),
+            None => return,
+        };
 
         // Retire pending renames that have landed, or whose tab is gone. Keyed
         // by the pre-rename name, which is what we can still match on.
@@ -367,10 +406,10 @@ impl State {
                 continue;
             }
 
-            let Some(session) = best.get(&tab.position) else {
+            let Some(pane_id) = title_source.get(&tab.position) else {
                 continue;
             };
-            let Some(title) = titles.get(&session.pane_id) else {
+            let Some(title) = titles.get(pane_id) else {
                 continue;
             };
             let desired = sanitize_tab_title(title);

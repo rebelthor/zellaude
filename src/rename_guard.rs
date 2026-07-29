@@ -1,3 +1,38 @@
+/// Pick which pane, of the candidates on one tab, should supply the tab title.
+///
+/// Each candidate is `(pane_id, title, last_event_ts)`, where `last_event_ts` is
+/// 0 when no Claude Code hook activity is known for that pane. Returns `None`
+/// when no candidate has a usable title.
+///
+/// The rule that matters: **a candidate with a title is eligible even when its
+/// activity timestamp is 0.** `self.sessions` is populated only by hook events,
+/// so it is empty until a hook fires — the normal state right after a zellij
+/// server restart resurrects panes from the serialized layout. An earlier
+/// version keyed title selection off the session map and so renamed nothing at
+/// all in that state, leaving every tab at `Tab #N` while the titles sat unused
+/// in the pane manifest.
+///
+/// Ties broken by lowest pane id so the choice is stable across updates rather
+/// than flapping with map iteration order.
+pub fn pick_title_pane(candidates: &[(u32, String, u64)]) -> Option<u32> {
+    let mut best: Option<(u32, u64)> = None;
+    for (pane_id, title, activity) in candidates {
+        if title.trim().is_empty() {
+            continue;
+        }
+        let better = match best {
+            None => true,
+            Some((best_id, best_activity)) => {
+                *activity > best_activity || (*activity == best_activity && *pane_id < best_id)
+            }
+        };
+        if better {
+            best = Some((*pane_id, *activity));
+        }
+    }
+    best.map(|(id, _)| id)
+}
+
 /// Whether a tab's reported position can be trusted enough to address a
 /// `rename_tab` call at it.
 ///
@@ -34,6 +69,44 @@ pub fn rename_budget_exhausted(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn titles_work_with_no_session_activity_at_all() {
+        // The regression this fix exists for: after a server restart the
+        // sessions map is empty (no hook has fired), so every activity stamp is
+        // 0. Titles must still be applied.
+        let candidates = vec![(7, "Assess OpenBao status".to_string(), 0)];
+        assert_eq!(pick_title_pane(&candidates), Some(7));
+    }
+
+    #[test]
+    fn panes_without_a_title_are_not_candidates() {
+        let candidates = vec![(1, "".to_string(), 99), (2, "   ".to_string(), 50)];
+        assert_eq!(pick_title_pane(&candidates), None);
+    }
+
+    #[test]
+    fn most_recently_active_pane_wins_when_several_have_titles() {
+        let candidates = vec![
+            (1, "older task".to_string(), 100),
+            (2, "newer task".to_string(), 200),
+        ];
+        assert_eq!(pick_title_pane(&candidates), Some(2));
+    }
+
+    #[test]
+    fn ties_resolve_to_lowest_pane_id_for_stability() {
+        // Equal activity (e.g. both 0) must not depend on iteration order.
+        let candidates = vec![(9, "a".to_string(), 0), (4, "b".to_string(), 0)];
+        assert_eq!(pick_title_pane(&candidates), Some(4));
+    }
+
+    #[test]
+    fn an_untitled_pane_never_beats_a_titled_one_on_activity() {
+        // A busy pane with no OSC title must not suppress a quiet titled pane.
+        let candidates = vec![(1, "".to_string(), 999), (2, "real title".to_string(), 0)];
+        assert_eq!(pick_title_pane(&candidates), Some(2));
+    }
 
     #[test]
     fn position_trusted_when_snapshot_agrees_with_list_order() {
