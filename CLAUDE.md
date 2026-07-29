@@ -1,9 +1,12 @@
 # zellaude
 
 Zellij plugin (WASM) that replaces the tab bar with per-tab Claude Code activity
-status. This clone is the `rebelthor/zellaude` **fork**, which adds the opt-in
-"Tab titles" setting on branch `feat/tab-titles` (upstream PR
-[ishefi/zellaude#14](https://github.com/ishefi/zellaude/pull/14)).
+status. This clone is `rebelthor/zellaude`, a fork of `ishefi/zellaude` that adds
+the opt-in "Tab titles" setting on branch `feat/tab-titles`.
+
+The fork is standalone: all work stays on `rebelthor/zellaude` and is not
+proposed upstream. `feat/tab-titles` is the working branch and ships the binary
+in use.
 
 ## Always push
 
