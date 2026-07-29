@@ -4,7 +4,7 @@ A Zellij status bar plugin that replaces the default tab bar with Claude Code ac
 
 ![Zellaude status bar example](assets/bar-example.svg)
 
-> **This is a fork of [`ishefi/zellaude`](https://github.com/ishefi/zellaude) that adds one opt-in feature: "Tab titles".** It is proposed upstream as [PR #14](https://github.com/ishefi/zellaude/pull/14); until that lands, this fork ships a prebuilt binary you can use today (see [Install](#install)). Everything else below is upstream's feature set, unchanged.
+> **This is a fork of [`ishefi/zellaude`](https://github.com/ishefi/zellaude) that adds one opt-in feature: "Tab titles".** This fork ships a prebuilt binary you can use today (see [Install](#install)). Everything else below is upstream's feature set, unchanged.
 
 ## What this fork adds
 
