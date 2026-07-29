@@ -1,3 +1,48 @@
+/// Whether a pane title is a real, task-specific label worth putting on a tab.
+///
+/// Rejects placeholders, which are worse than leaving the tab alone: they
+/// overwrite a good existing label with something meaningless, and every tab
+/// running an idle agent collapses to the same generic string.
+///
+/// Two sources of placeholder:
+/// - **zellij's own default pane titles** (`Pane #3`, `Pane 3`), present before
+///   the program in the pane sets any OSC title.
+/// - **the agent's generic title** (`Claude Code`), which Claude Code emits at
+///   startup and between tasks, before it has a conversation summary.
+///
+/// Titles arrive with a leading activity glyph (e.g. `✳ `, `⠐ `), so the glyph
+/// is stripped before comparison.
+pub fn title_is_meaningful(raw: &str) -> bool {
+    let stripped = strip_leading_glyph(raw);
+    if stripped.is_empty() {
+        return false;
+    }
+    if stripped.eq_ignore_ascii_case("Claude Code") {
+        return false;
+    }
+    // zellij's default: "Pane" optionally followed by '#' and a number.
+    let lower = stripped.to_ascii_lowercase();
+    if let Some(rest) = lower.strip_prefix("pane") {
+        let rest = rest.trim().trim_start_matches('#').trim();
+        if rest.is_empty() || rest.chars().all(|c| c.is_ascii_digit()) {
+            return false;
+        }
+    }
+    true
+}
+
+/// Strip a leading non-alphanumeric activity glyph and surrounding whitespace.
+///
+/// Titles are prefixed with a status symbol (`✳`, braille spinner frames, and
+/// similar), which is presentation rather than content.
+fn strip_leading_glyph(raw: &str) -> &str {
+    let trimmed = raw.trim();
+    match trimmed.char_indices().find(|(_, c)| c.is_alphanumeric()) {
+        Some((idx, _)) => trimmed[idx..].trim(),
+        None => "",
+    }
+}
+
 /// Pick which pane, of the candidates on one tab, should supply the tab title.
 ///
 /// Each candidate is `(pane_id, title, last_event_ts)`, where `last_event_ts` is
@@ -17,7 +62,7 @@
 pub fn pick_title_pane(candidates: &[(u32, String, u64)]) -> Option<u32> {
     let mut best: Option<(u32, u64)> = None;
     for (pane_id, title, activity) in candidates {
-        if title.trim().is_empty() {
+        if !title_is_meaningful(title) {
             continue;
         }
         let better = match best {
@@ -69,6 +114,55 @@ pub fn rename_budget_exhausted(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rejects_the_agents_generic_startup_title() {
+        // Observed live as "✳ Claude Code" — Claude Code's title before it has a
+        // conversation summary. Renaming a tab to this is a regression: it
+        // replaces a real label with a generic one.
+        assert!(!title_is_meaningful("✳ Claude Code"));
+        assert!(!title_is_meaningful("⠐ Claude Code"));
+        assert!(!title_is_meaningful("Claude Code"));
+    }
+
+    #[test]
+    fn rejects_zellij_default_pane_titles() {
+        assert!(!title_is_meaningful("Pane 1"));
+        assert!(!title_is_meaningful("Pane #3"));
+        assert!(!title_is_meaningful("pane 12"));
+    }
+
+    #[test]
+    fn accepts_a_real_task_summary() {
+        assert!(title_is_meaningful("✳ Assess OpenBao project status"));
+        assert!(title_is_meaningful("Disable Claude Code team mates feature"));
+    }
+
+    #[test]
+    fn a_word_starting_with_pane_is_not_a_placeholder() {
+        // Guard against the prefix check being too greedy.
+        assert!(title_is_meaningful("Panel layout refactor"));
+        assert!(title_is_meaningful("Pane splitting bug"));
+    }
+
+    #[test]
+    fn placeholder_panes_are_skipped_when_choosing_a_title() {
+        // A placeholder must never win, even with the freshest activity.
+        let candidates = vec![
+            (1, "✳ Claude Code".to_string(), 999),
+            (2, "Real task name".to_string(), 1),
+        ];
+        assert_eq!(pick_title_pane(&candidates), Some(2));
+    }
+
+    #[test]
+    fn all_placeholders_means_leave_the_tab_alone() {
+        let candidates = vec![
+            (1, "✳ Claude Code".to_string(), 5),
+            (2, "Pane 2".to_string(), 9),
+        ];
+        assert_eq!(pick_title_pane(&candidates), None);
+    }
 
     #[test]
     fn titles_work_with_no_session_activity_at_all() {
