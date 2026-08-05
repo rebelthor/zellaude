@@ -273,9 +273,9 @@ fn render_tabs(
         })
         .collect();
 
-    // Reserve space for arrows and the fixed content of each tab, then use
-    // the rest as a flexible title area. If the full titles fit, leftover
-    // space expands the tabs. Otherwise, titles share the smaller area.
+    // Reserve space for arrows and the fixed content of each tab. When the
+    // full titles fit, tabs keep their natural width. Otherwise, titles share
+    // the smaller available area.
     let fixed_widths: Vec<usize> = tabs
         .iter()
         .enumerate()
@@ -291,20 +291,11 @@ fn render_tabs(
     let available_name_width = cols.saturating_sub(prefix_width + arrows_width + fixed_width);
     let natural_name_widths: Vec<usize> = tabs.iter().map(|tab| display_width(&tab.name)).collect();
     let natural_name_width = natural_name_widths.iter().sum::<usize>();
-    let mut name_widths = if natural_name_width <= available_name_width {
+    let name_widths = if natural_name_width <= available_name_width {
         natural_name_widths
     } else {
         vec![available_name_width / count; count]
     };
-    let remaining_name_width = available_name_width.saturating_sub(name_widths.iter().sum());
-    let extra_per_tab = remaining_name_width / count;
-    let extra_tabs = remaining_name_width % count;
-    for (i, width) in name_widths.iter_mut().enumerate() {
-        *width += extra_per_tab;
-        if i < extra_tabs {
-            *width += 1;
-        }
-    }
 
     let mut prev_bg = prefix_bg;
 
@@ -392,12 +383,6 @@ fn render_tabs(
                 let _ = write!(buf, " {bold_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
                 *col += 1 + display_width(&truncated);
             }
-            let name_padding = max_name_len.saturating_sub(display_width(&truncated));
-            if name_padding > 0 {
-                let _ = write!(buf, "{:width$}", "", width = name_padding);
-                *col += name_padding;
-            }
-
             // Elapsed suffix
             if let Some(ref es) = elapsed_strs[i] {
                 if *col + 1 + es.len() + 1 < cols {
@@ -449,12 +434,6 @@ fn render_tabs(
                 let _ = write!(buf, "{bold_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
                 *col += display_width(&truncated);
             }
-            let name_padding = max_name_len.saturating_sub(display_width(&truncated));
-            if name_padding > 0 {
-                let _ = write!(buf, "{:width$}", "", width = name_padding);
-                *col += name_padding;
-            }
-
             // Fullscreen indicator
             if tab.is_fullscreen_active && *col + 3 < cols {
                 let _ = write!(buf, " {}F{RESET}{tab_bg_str}", fg(255, 200, 60));
