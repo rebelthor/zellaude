@@ -20,6 +20,29 @@ the deployed `.wasm` with it. An unpushed commit here is one `rm` from gone, so
 Local-only commits are not enough: check `git status -sb` for an `ahead` marker
 before considering work finished.
 
+## Live session safety
+
+NEVER experiment in an attached work session. Treat every session containing active Claude or
+work tabs as production state.
+
+For plugin testing, permission prompts, pipe probes, reloads, focus changes, key injection, or
+tab and pane cleanup:
+
+- Work from a terminal outside Zellij.
+- Create a dedicated test session, for example with `zellij attach --create zellaude-test`.
+- Pass `--session zellaude-test` to every command that can affect that session. For actions, use
+  `zellij --session zellaude-test action ...`.
+- Inspect the explicitly targeted session before any side effect.
+- Never infer the target from current focus, tab position, or the session inherited by the shell.
+- If a separate session cannot be created and targeted explicitly, stop. Do not fall back to a
+  live work session.
+- Clean up only the named test session after verifying that no work tabs are in it.
+
+## Hook portability
+
+The hook selects GNU `timeout` on Fedora and Homebrew `gtimeout` on macOS. Keep that selection
+portable when changing the hook.
+
 ## Build and test
 
 `cargo` is not on `PATH`; it lives at
@@ -54,7 +77,7 @@ cp target/wasm32-wasip1/release/zellaude.wasm \
 
 `~/.config/zellij/plugins/zellaude.wasm` is a symlink to that path. Back up the
 previous `.wasm` alongside it before overwriting, and record the new sha256 in
-`~/sync/projects/zellij-config/CLAUDE.md` — that file is the source of truth for
+`~/sync/projects/zellij-config/CLAUDE.md`, that file is the source of truth for
 which build is deployed, and a stale hash there has caused real confusion.
 
 A running zellij server keeps the old WASM in memory. To pick up a new build
@@ -71,7 +94,7 @@ serialized layout, in-flight agent work does not.
 
 ## Tab renames are guarded on purpose
 
-`apply_tab_titles()` in `src/main.rs` looks over-defensive. It is not — see the
+`apply_tab_titles()` in `src/main.rs` looks over-defensive. It is not. See the
 doc comment there for the full account.
 
 `rename_tab` addresses tabs by *position* and zellij exposes no stable per-tab
@@ -88,5 +111,5 @@ unit tests.
 
 Do not remove or loosen these while #3535 is open. It is still open, and the
 crash reproduced on zellij 0.44.3, which already contains the PR credited with
-fixing it. If renames feel sluggish, `RENAME_COOLDOWN_MS` is the knob — not
+fixing it. If renames feel sluggish, `RENAME_COOLDOWN_MS` is the knob, not
 removal.

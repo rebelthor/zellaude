@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# zellaude-hook.sh — Claude Code hook → zellij pipe bridge
+# zellaude-hook.sh - Claude Code hook to zellij pipe bridge
 # Forwards hook events to the zellaude Zellij plugin via pipe.
 #
 # Usage in ~/.claude/settings.json hooks:
@@ -96,7 +96,7 @@ if [ "$HOOK_EVENT" = "PermissionRequest" ]; then
 
   if [ "$SHOULD_NOTIFY" = true ]; then
     TOOL_SUFFIX=""
-    [ -n "$TOOL_NAME" ] && TOOL_SUFFIX=" — $TOOL_NAME"
+    [ -n "$TOOL_NAME" ] && TOOL_SUFFIX=" - $TOOL_NAME"
     TITLE="⚠ Claude Code"
     MESSAGE="Permission requested${TOOL_SUFFIX}"
 
@@ -134,5 +134,16 @@ if [ "$HOOK_EVENT" = "PermissionRequest" ]; then
   fi
 fi
 
-# Send to plugin (hook is already async, no need to background)
-zellij pipe --name "zellaude" -- "$PAYLOAD"
+# Send to plugin. Use the GNU timeout name on Fedora and the Homebrew name on macOS.
+TIMEOUT_BIN=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_BIN="gtimeout"
+fi
+
+if [ -n "$TIMEOUT_BIN" ]; then
+  "$TIMEOUT_BIN" 1 zellij pipe --name "zellaude" -- "$PAYLOAD" 2>/dev/null
+else
+  zellij pipe --name "zellaude" -- "$PAYLOAD" 2>/dev/null
+fi
