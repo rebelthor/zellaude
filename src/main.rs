@@ -25,6 +25,17 @@ const CONFIG_LOAD_RETRY_SECS: u64 = 5;
 /// How many config-load retries before giving up until the next reload.
 const CONFIG_LOAD_MAX_ATTEMPTS: u8 = 12;
 
+// Claude does not reliably run its SessionEnd hook when its terminal pane is
+// killed by closing a Zellij tab. The zellaude plugin does get a PaneUpdate,
+// though, so use the already-installed matrix hook as the cleanup transport.
+// This path is the shared Syncthing path on both supported hosts; the command
+// is a no-op on machines where the matrix project is not installed.
+const MATRIX_CLEANUP_COMMAND: &str = r#"
+if [ -x "$HOME/sync/projects/agent-status-matrix/host/agent-matrix-hook.sh" ]; then
+    printf '%s' "$1" | "$HOME/sync/projects/agent-status-matrix/host/agent-matrix-hook.sh"
+fi
+"#;
+
 /// Strip control characters and clamp length before using a pane title as a tab
 /// name. The status bar truncates further for display; this just bounds it.
 fn sanitize_tab_title(raw: &str) -> String {
@@ -466,8 +477,46 @@ impl State {
     }
 
     fn remove_dead_panes(&mut self) {
+        let dead_sessions: Vec<SessionInfo> = self
+            .sessions
+            .values()
+            .filter(|session| !self.pane_to_tab.contains_key(&session.pane_id))
+            .cloned()
+            .collect();
+
+        // A closed pane can bypass Claude's SessionEnd hook entirely. Notify
+        // the matrix before dropping the local session record, using the same
+        // hook script as normal cleanup so it gets the established IPv4,
+        // retry, and metadata-cache behavior. `run_command` is asynchronous;
+        // one command per dead pane is intentional because each invocation is
+        // independently best-effort and carries its own session id.
+        for session in &dead_sessions {
+            self.notify_matrix_session_end(session);
+        }
+
         self.sessions
             .retain(|pane_id, _| self.pane_to_tab.contains_key(pane_id));
+    }
+
+    fn notify_matrix_session_end(&self, session: &SessionInfo) {
+        let payload = serde_json::json!({
+            "hook_event_name": "SessionEnd",
+            "session_id": session.session_id,
+            "cwd": session.cwd,
+        })
+        .to_string();
+        let mut context = BTreeMap::new();
+        context.insert("type".into(), "matrix_cleanup".into());
+        run_command(
+            &[
+                "sh",
+                "-c",
+                MATRIX_CLEANUP_COMMAND,
+                "zellaude-matrix-cleanup",
+                &payload,
+            ],
+            context,
+        );
     }
 
     fn cleanup_stale_sessions(&mut self) -> bool {

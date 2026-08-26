@@ -43,6 +43,16 @@ tab and pane cleanup:
 The hook selects GNU `timeout` on Fedora and Homebrew `gtimeout` on macOS. Keep that selection
 portable when changing the hook.
 
+## Matrix cleanup on pane close
+
+Claude Code may be killed by Zellij before its asynchronous `SessionEnd` hook runs. The plugin's
+`PaneUpdate` path therefore treats a pane that disappears as an implicit session end: it invokes
+the canonical `~/sync/projects/agent-status-matrix/host/agent-matrix-hook.sh` through
+`run_command` with a synthetic `SessionEnd` payload. The command is a no-op on hosts without the
+matrix project, and the matrix firmware guards cleanup by event timestamp so a delayed close
+notification cannot remove a newer incarnation of the same session ID. Rebuild and deploy the
+plugin after changing this path; the zellij server must reload the plugin to pick up the new WASM.
+
 ## Build and test
 
 `cargo` is not on `PATH`; it lives at
