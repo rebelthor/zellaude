@@ -87,6 +87,7 @@ impl ZellijPlugin for State {
                 }
                 self.active_tab_index = new_active;
                 self.tabs = tabs;
+                self.tabs_loaded = true;
                 self.rebuild_pane_map();
                 true
             }
@@ -477,6 +478,13 @@ impl State {
     }
 
     fn remove_dead_panes(&mut self) {
+        // PaneUpdate can arrive before the first TabUpdate while a plugin
+        // instance is starting or reloading. Its empty pane-to-tab map is not
+        // evidence that every tracked pane was closed.
+        if !self.tabs_loaded {
+            return;
+        }
+
         let dead_sessions: Vec<SessionInfo> = self
             .sessions
             .values()

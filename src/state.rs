@@ -167,6 +167,9 @@ pub struct State {
     pub sessions: BTreeMap<u32, SessionInfo>,
     pub pane_to_tab: HashMap<u32, (usize, String)>,
     pub tabs: Vec<TabInfo>,
+    /// True after the first TabUpdate; prevents a PaneUpdate arriving first
+    /// from treating the not-yet-populated tab map as a mass pane deletion.
+    pub tabs_loaded: bool,
     pub pane_manifest: Option<PaneManifest>,
     pub active_tab_index: Option<usize>,
     pub click_regions: Vec<ClickRegion>,
