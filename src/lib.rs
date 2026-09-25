@@ -6,3 +6,12 @@
 //! reach it without a live zellij.
 
 pub mod rename_guard;
+
+#[cfg(test)]
+mod state;
+#[cfg(test)]
+mod event_handler;
+#[cfg(test)]
+mod render;
+#[cfg(test)]
+mod background_tests;

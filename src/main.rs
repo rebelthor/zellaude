@@ -633,12 +633,17 @@ impl State {
                 .map(|existing| session.last_event_ts > existing.last_event_ts)
                 .unwrap_or(true);
             if dominated {
+                if let Some(existing) = self.sessions.get(&pane_id) {
+                    session.merge_background(existing);
+                }
                 // Refresh tab name from our local pane map
                 if let Some((idx, name)) = self.pane_to_tab.get(&pane_id) {
                     session.tab_index = Some(*idx);
                     session.tab_name = Some(name.clone());
                 }
                 self.sessions.insert(pane_id, session);
+            } else if let Some(existing) = self.sessions.get_mut(&pane_id) {
+                existing.merge_background(&session);
             }
         }
     }

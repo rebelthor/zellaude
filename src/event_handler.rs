@@ -17,6 +17,25 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
         return;
     }
 
+    // Background snapshots have their own clock and never change foreground
+    // activity, attention, or elapsed time. Ignore snapshots for an old session
+    // and snapshots arriving before SessionStart; the bridge refreshes them.
+    if event == "BackgroundStatus" {
+        if let (Some(background), Some(ts_ms), Some(session)) = (
+            payload.background,
+            payload.ts_ms,
+            state.sessions.get_mut(&payload.pane_id),
+        ) {
+            if payload.session_id.as_deref() == Some(session.session_id.as_str())
+                && ts_ms >= session.background_ts_ms
+            {
+                session.background = background;
+                session.background_ts_ms = ts_ms;
+            }
+        }
+        return;
+    }
+
     // Drop events that arrive out of order (async hooks can race through
     // parallel subprocesses). Only enforced when the hook supplied ts_ms —
     // an absent field means an old hook script and is treated as fresh.
@@ -69,6 +88,8 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
             last_event_ts: 0,
             cwd: None,
             last_ts_ms: 0,
+            background: Default::default(),
+            background_ts_ms: 0,
         });
 
     if matches!(activity, Activity::Waiting) {
@@ -90,6 +111,10 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
         state.flash_deadlines.remove(&payload.pane_id);
     }
 
+    if event == "SessionStart" {
+        session.background = Default::default();
+        session.background_ts_ms = 0;
+    }
     session.activity = activity;
     session.last_event_ts = crate::state::unix_now();
     if let Some(ts_ms) = payload.ts_ms {

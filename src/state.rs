@@ -43,6 +43,51 @@ pub struct SessionInfo {
     pub cwd: Option<String>,
     #[serde(default)]
     pub last_ts_ms: u64,
+    #[serde(default)]
+    pub background: BackgroundActivity,
+    #[serde(default)]
+    pub background_ts_ms: u64,
+}
+
+impl SessionInfo {
+    pub fn merge_background(&mut self, other: &Self) {
+        if self.session_id == other.session_id && other.background_ts_ms > self.background_ts_ms {
+            self.background = other.background;
+            self.background_ts_ms = other.background_ts_ms;
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Serialize, Deserialize)]
+#[serde(default)]
+pub struct BackgroundActivity {
+    pub agents: u32,
+    pub jobs: u32,
+    pub watchers: u32,
+}
+
+impl BackgroundActivity {
+    pub fn add(&mut self, other: Self) {
+        self.agents = self.agents.saturating_add(other.agents);
+        self.jobs = self.jobs.saturating_add(other.jobs);
+        self.watchers = self.watchers.saturating_add(other.watchers);
+    }
+
+    pub fn badge(self) -> String {
+        let (kind, count) = if self.agents > 0 {
+            ('a', self.agents)
+        } else if self.jobs > 0 {
+            ('j', self.jobs)
+        } else {
+            ('w', self.watchers)
+        };
+        match count {
+            0 => String::new(),
+            1 => kind.to_string(),
+            2..=9 => format!("{kind}{count}"),
+            _ => format!("{kind}9+"),
+        }
+    }
 }
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +100,7 @@ pub struct HookPayload {
     pub zellij_session: Option<String>,
     pub term_program: Option<String>,
     pub ts_ms: Option<u64>,
+    pub background: Option<BackgroundActivity>,
 }
 
 /// A tab rename zellaude has issued but not yet seen reflected in a TabUpdate.

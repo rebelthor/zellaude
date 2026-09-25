@@ -255,6 +255,18 @@ fn render_tabs(
         })
         .collect();
 
+    // Aggregate every pane in a tab, not only the foreground-status winner.
+    let background_badges: Vec<String> = tabs
+        .iter()
+        .map(|tab| {
+            let mut total = crate::state::BackgroundActivity::default();
+            for session in state.sessions.values().filter(|s| s.tab_index == Some(tab.position)) {
+                total.add(session.background);
+            }
+            total.badge()
+        })
+        .collect();
+
     // Pre-compute elapsed strings (only for Claude tabs)
     let elapsed_strs: Vec<Option<String>> = best_sessions
         .iter()
@@ -283,7 +295,7 @@ fn render_tabs(
             let session_width = if best_sessions[i].is_some() { 4 } else { 2 };
             let elapsed_width = elapsed_strs[i].as_ref().map_or(0, |s| 1 + display_width(s));
             let fullscreen_width = if tab.is_fullscreen_active { 2 } else { 0 };
-            session_width + elapsed_width + fullscreen_width
+            session_width + elapsed_width + fullscreen_width + background_badges[i].len()
         })
         .collect();
     let fixed_width = fixed_widths.iter().sum::<usize>();
@@ -302,7 +314,7 @@ fn render_tabs(
     for (i, tab) in tabs.iter().enumerate() {
         // Stop if we'd overflow — need room for at least arrow + closing arrow
         let arrows_needed = if prev_bg == prefix_bg { 1 } else { 2 };
-        if *col + arrows_needed + 3 > cols {
+        if *col + arrows_needed + fixed_widths[i] > cols {
             break;
         }
 
@@ -376,6 +388,11 @@ fn render_tabs(
             // Symbol
             let _ = write!(buf, "{sym_fg}{}", style.symbol);
             *col += display_width(style.symbol);
+
+            // Adjacent ASCII badge adds one column for a single background run.
+            let badge = &background_badges[i];
+            let _ = write!(buf, "{}{badge}", fg(200, 190, 240));
+            *col += badge.len();
 
             // Space + name
             if !truncated.is_empty() {
@@ -593,4 +610,40 @@ fn render_settings_menu(state: &mut State, buf: &mut String, col: &mut usize) {
         end_col: *col,
         action: MenuAction::CloseMenu,
     });
+}
+
+#[cfg(test)]
+mod background_render_tests {
+    use super::*;
+    use crate::state::BackgroundActivity;
+
+    #[test]
+    fn badge_includes_other_panes_and_reserves_width() {
+        let mut state = State::default();
+        state.settings.elapsed_time = false;
+        state.tabs.push(TabInfo { position: 0, name: "Long title".into(), ..Default::default() });
+        for (pane, activity, background) in [
+            (1, Activity::Waiting, BackgroundActivity::default()),
+            (2, Activity::Done, BackgroundActivity { agents: 2, jobs: 3, watchers: 4 }),
+        ] {
+            state.sessions.insert(pane, SessionInfo {
+                session_id: pane.to_string(), pane_id: pane, activity,
+                tab_name: None, tab_index: Some(0), last_event_ts: 0,
+                cwd: None, last_ts_ms: 0, background, background_ts_ms: 0,
+            });
+        }
+        for width in 1..80 {
+            state.click_regions.clear();
+            let mut buf = String::new();
+            let mut col = 0;
+            render_tabs(&mut state, &mut buf, &mut col, width, PREFIX_BG, 0);
+            assert!(col <= width, "width={width}, col={col}");
+            if width >= 8 {
+                assert!(buf.contains("a2"));
+                assert!(!buf.contains("j3"));
+                assert_eq!(state.click_regions[0].pane_id, 1);
+                assert!(state.click_regions[0].is_waiting);
+            }
+        }
+    }
 }
