@@ -75,9 +75,20 @@ const PREFIX_BG_SETTINGS: Color = (100, 70, 140);
 const TAB_BG_ACTIVE: Color = (140, 100, 200);
 const TAB_BG_INACTIVE: Color = (80, 75, 110);
 const FLASH_BG_BRIGHT: Color = (80, 80, 30);
-/// Dark chip behind the activity symbol on a colored tab, so a status color
-/// never vanishes into a tab of the same hue.
-const SYMBOL_CHIP_BG: Color = (40, 38, 56);
+/// How far apart two colors must be (sum of channel differences) for a status
+/// symbol to stay readable on a colored tab.
+const MIN_SYMBOL_CONTRAST: u16 = 160;
+
+/// A status symbol keeps its color unless it would vanish into the tab
+/// background (an orange tool symbol on an orange tab); then it turns white.
+fn readable_on(sym: Color, tab: Color) -> Color {
+    let d = |a: u8, b: u8| (a as i16 - b as i16).unsigned_abs();
+    if d(sym.0, tab.0) + d(sym.1, tab.1) + d(sym.2, tab.2) < MIN_SYMBOL_CONTRAST {
+        (255, 255, 255)
+    } else {
+        sym
+    }
+}
 
 /// Tab background for a Claude Code `/color` name, dark enough for white text.
 fn session_color(name: &str) -> Option<Color> {
@@ -401,21 +412,19 @@ fn render_tabs(
 
             let (sym_fg, name_fg, name_bold) = if is_flash_bright {
                 (fg(255, 255, 80), fg(255, 255, 80), true)
+            } else if color.is_some() {
+                let (r, g, b) = readable_on((style.r, style.g, style.b), tab_bg);
+                let name = if is_active { fg(255, 255, 255) } else { fg(225, 222, 235) };
+                (fg(r, g, b), name, is_active)
             } else if is_active {
                 (fg(style.r, style.g, style.b), fg(255, 255, 255), true)
-            } else if color.is_some() {
-                (fg(style.r, style.g, style.b), fg(225, 222, 235), false)
             } else {
                 (fg(style.r, style.g, style.b), fg(120, 220, 220), false)
             };
 
-            // Leading space; a colored tab puts symbol and badge on a dark chip.
+            // Leading space
             let _ = write!(buf, "{tab_bg_str} ");
             *col += 1;
-            let chip = color.is_some() && !is_flash_bright;
-            if chip {
-                let _ = write!(buf, "{}", bg(SYMBOL_CHIP_BG.0, SYMBOL_CHIP_BG.1, SYMBOL_CHIP_BG.2));
-            }
 
             // Symbol
             let _ = write!(buf, "{sym_fg}{}", style.symbol);
@@ -425,9 +434,6 @@ fn render_tabs(
             let badge = &background_badges[i];
             let _ = write!(buf, "{}{badge}", fg(200, 190, 240));
             *col += badge.len();
-            if chip {
-                let _ = write!(buf, "{tab_bg_str}");
-            }
 
             // Space + name
             if !truncated.is_empty() {
@@ -684,7 +690,7 @@ mod background_render_tests {
     }
 
     #[test]
-    fn colored_session_paints_tab_and_chips_symbol() {
+    fn colored_session_paints_tab_and_keeps_symbol_readable() {
         let mut state = State::default();
         state.settings.elapsed_time = false;
         state.tabs.push(TabInfo { position: 0, name: "work".into(), active: true, ..Default::default() });
@@ -692,13 +698,15 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Done,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()),
+            color: Some("green".into()),
         });
         let mut buf = String::new();
         let mut col = 0;
         render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
-        assert!(buf.contains(&bg(55, 105, 215)));
-        assert!(buf.contains(&bg(SYMBOL_CHIP_BG.0, SYMBOL_CHIP_BG.1, SYMBOL_CHIP_BG.2)));
+        assert!(buf.contains(&bg(40, 140, 75)));
         assert!(!buf.contains(&bg(TAB_BG_ACTIVE.0, TAB_BG_ACTIVE.1, TAB_BG_ACTIVE.2)));
+        // The green done check would vanish on a green tab, so it turns white.
+        assert!(buf.contains(&format!("{}✓", fg(255, 255, 255))));
+        assert_eq!(readable_on((180, 140, 255), (55, 105, 215)), (180, 140, 255));
     }
 }
