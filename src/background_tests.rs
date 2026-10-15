@@ -123,16 +123,3 @@ fn background_snapshot_carries_session_color() {
     assert_eq!(state.sessions[&1].color.as_deref(), Some("orange"));
     assert_eq!(state.sessions[&1].activity, Activity::Init);
 }
-
-#[test]
-fn matrix_order_follows_tabs_then_panes() {
-    let mut state = State::default();
-    for (pane, tab, sid) in [(7, 2, "c"), (3, 0, "a"), (9, 0, "b"), (5, 1, "")] {
-        state.sessions.insert(pane, crate::state::SessionInfo {
-            session_id: sid.into(), pane_id: pane, activity: Activity::Idle,
-            tab_name: None, tab_index: Some(tab), last_event_ts: 0, cwd: None,
-            last_ts_ms: 0, background: Default::default(), background_ts_ms: 0, color: None,
-        });
-    }
-    assert_eq!(crate::state::matrix_order(&state.sessions), ["a", "b", "c"]);
-}

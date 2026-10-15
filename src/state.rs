@@ -114,17 +114,6 @@ pub struct HookPayload {
     pub color: Option<String>,
 }
 
-/// Session ids in Zellij tab order (then pane id), for the agent matrix's rows.
-pub fn matrix_order(sessions: &BTreeMap<u32, SessionInfo>) -> Vec<String> {
-    let mut placed: Vec<(usize, u32, &str)> = sessions
-        .values()
-        .filter(|s| !s.session_id.is_empty())
-        .filter_map(|s| s.tab_index.map(|t| (t, s.pane_id, s.session_id.as_str())))
-        .collect();
-    placed.sort();
-    placed.into_iter().map(|(_, _, id)| id.to_string()).collect()
-}
-
 /// A tab rename zellaude has issued but not yet seen reflected in a TabUpdate.
 ///
 /// Tracked so a rename that never lands (see the `#3535` note on
@@ -260,9 +249,4 @@ pub struct State {
     pub pending_renames: HashMap<String, PendingRename>,
     /// Wall-clock ms of the last rename batch, used to rate-limit renames.
     pub last_rename_ms: u64,
-    /// Last row order sent to the agent matrix, and when.
-    pub last_matrix_order: Vec<String>,
-    pub last_matrix_order_ms: u64,
-    /// This instance's plugin id, read once in `load`.
-    pub plugin_id: Option<u32>,
 }

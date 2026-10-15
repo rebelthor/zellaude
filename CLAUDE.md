@@ -38,13 +38,6 @@ tab and pane cleanup:
   live work session.
 - Clean up only the named test session after verifying that no work tabs are in it.
 
-## Matrix row order
-
-The instance on the active tab posts `{host, order: [session_id, ...]}` straight to
-`agent-matrix.local` (`MATRIX_ORDER_COMMAND`) when the tab-order list changes and every 15 s, so
-the board's rows follow the tabs. Call host functions such as `get_plugin_ids()` only from `load`:
-calling it from `render` panicked every instance.
-
 ## Hook portability
 
 The hook selects GNU `timeout` on Fedora and Homebrew `gtimeout` on macOS. Keep that selection
@@ -108,10 +101,11 @@ zellij --session <name> action start-or-reload-plugin \
   file:$HOME/.config/zellij/plugins/zellaude.wasm
 ```
 
-Prefer that over a restart. A reload can leave the instances with `RunCommands` denied (the
-zellij log shows `permission 'RunCommands' denied`), which silently stops the settings load, the
-matrix cleanup and the matrix row order. Grant it again from a normal pane with
-`zellij plugin -- file:~/.config/zellij/plugins/zellaude.wasm` and `y`. Killing the server kills every pane's process,
+Prefer that over a restart. A reload leaves the instances with `RunCommands` denied for a while
+(the zellij log shows `permission 'RunCommands' denied`), and `zellij plugin -- file:...` shows no
+prompt when the grant is cached, so it does not help: it only opens a stray, unfocusable
+tab-bar copy, which `zellij action close-pane --pane-id plugin_<id>` removes. Call host functions
+such as `get_plugin_ids()` only from `load`: calling it from `render` panicked every instance. Killing the server kills every pane's process,
 including any Claude agent mid-task; tabs and layout come back from the
 serialized layout, in-flight agent work does not.
 
