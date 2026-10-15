@@ -110,3 +110,16 @@ fn session_color_sets_keeps_and_resets() {
     send(&mut state, "Stop", 400, Some("cyan"));
     assert_eq!(state.sessions[&1].color.as_deref(), Some("cyan"));
 }
+
+#[test]
+fn background_snapshot_carries_session_color() {
+    let mut state = State::default();
+    event(&mut state, "SessionStart", 100, "one", None);
+    let payload: HookPayload = serde_json::from_value(json!({
+        "pane_id": 1, "session_id": "one", "hook_event": "BackgroundStatus", "ts_ms": 200,
+        "background": BackgroundActivity::default(), "color": "orange"
+    })).unwrap();
+    handle_hook_event(&mut state, payload);
+    assert_eq!(state.sessions[&1].color.as_deref(), Some("orange"));
+    assert_eq!(state.sessions[&1].activity, Activity::Init);
+}

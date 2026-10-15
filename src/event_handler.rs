@@ -31,6 +31,10 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
             {
                 session.background = background;
                 session.background_ts_ms = ts_ms;
+                // The snapshot also carries /color, which fires no hook of its own.
+                if let Some(color) = payload.color {
+                    session.color = (color != "default").then_some(color);
+                }
             }
         }
         return;
