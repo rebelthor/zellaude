@@ -379,6 +379,8 @@ fn render_tabs(
     };
 
     let mut prev_bg = prefix_bg;
+    // Color of the arrowhead that closes the previous tab.
+    let mut prev_tip = prefix_bg;
 
     for (i, tab) in tabs.iter().enumerate() {
         // Stop if we'd overflow — need room for at least arrow + closing arrow
@@ -431,12 +433,20 @@ fn render_tabs(
         // A working tab breathes toward the bar background; the flash wins.
         let working = session.is_some_and(|s| s.activity.is_working());
         let tab_bg = if working && !is_flash_bright { breathe(base_bg, BAR_BG, now_ms) } else { base_bg };
+        // A working tab's closing arrowhead takes the steady activity color.
+        let tip = match session {
+            Some(s) if working && !is_flash_bright => {
+                let style = activity_style(&s.activity);
+                readable_on((style.r, style.g, style.b), base_bg)
+            }
+            _ => tab_bg,
+        };
 
         // Arrow: close previous segment, then open this tab
         if prev_bg == prefix_bg {
             arrow(buf, col, prev_bg, tab_bg);
         } else {
-            arrow(buf, col, prev_bg, BAR_BG);
+            arrow(buf, col, prev_tip, BAR_BG);
             arrow(buf, col, BAR_BG, tab_bg);
         }
 
@@ -553,11 +563,12 @@ fn render_tabs(
         }
 
         prev_bg = tab_bg;
+        prev_tip = tip;
     }
 
     // Arrow from last tab → bar background (only if we rendered any tabs)
     if prev_bg != prefix_bg || count > 0 {
-        arrow(buf, col, prev_bg, BAR_BG);
+        arrow(buf, col, prev_tip, BAR_BG);
     }
 }
 
@@ -770,5 +781,29 @@ mod background_render_tests {
         assert_eq!(breathe(tab, BAR_BG, 0), tab);
         assert_eq!(breathe(tab, BAR_BG, BREATH_MS), tab);
         assert_eq!(breathe(tab, BAR_BG, BREATH_MS / 2), (46, 79, 156));
+    }
+
+    #[test]
+    fn working_tab_arrowhead_takes_activity_color() {
+        let mut state = State::default();
+        state.settings.elapsed_time = false;
+        state.tabs.push(TabInfo { position: 0, name: "work".into(), ..Default::default() });
+        state.sessions.insert(1, SessionInfo {
+            session_id: "1".into(), pane_id: 1, activity: Activity::Tool("Bash".into()),
+            tab_name: None, tab_index: Some(0), last_event_ts: 0,
+            cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
+            color: Some("blue".into()),
+        });
+        let tip = format!("{}{}{SEPARATOR}", fg(255, 170, 50), bg(BAR_BG.0, BAR_BG.1, BAR_BG.2));
+        let mut buf = String::new();
+        let mut col = 0;
+        render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+        assert!(buf.ends_with(&tip));
+
+        state.sessions.get_mut(&1).unwrap().activity = Activity::Done;
+        let mut buf = String::new();
+        let mut col = 0;
+        render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+        assert!(!buf.contains(&tip));
     }
 }
