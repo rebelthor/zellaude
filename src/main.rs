@@ -36,6 +36,18 @@ if [ -x "$HOME/sync/projects/agent-status-matrix/host/agent-matrix-hook.sh" ]; t
 fi
 "#;
 
+/// Posts `{host, order}` to the agent matrix so its rows follow the tab order.
+/// A no-op on hosts without the matrix project, like the cleanup command.
+const MATRIX_ORDER_COMMAND: &str = r#"
+[ -d "$HOME/sync/projects/agent-status-matrix" ] || exit 0
+curl -4 -s -m 2 -X POST "http://agent-matrix.local/event" -H 'Content-Type: application/json' \
+    -d "{\"host\":\"$(hostname -s)\",\"order\":$1}" >/dev/null 2>&1
+"#;
+
+/// Resend the matrix row order this often even when unchanged: a session's row
+/// may not exist on the board yet when its order is first sent.
+const MATRIX_ORDER_REFRESH_MS: u64 = 15_000;
+
 /// Strip control characters and clamp length before using a pane title as a tab
 /// name. The status bar truncates further for display; this just bounds it.
 fn sanitize_tab_title(raw: &str) -> String {
@@ -52,6 +64,7 @@ register_plugin!(State);
 
 impl ZellijPlugin for State {
     fn load(&mut self, _configuration: BTreeMap<String, String>) {
+        self.plugin_id = Some(get_plugin_ids().plugin_id);
         request_permission(&[
             PermissionType::ReadApplicationState,
             PermissionType::ChangeApplicationState,
@@ -312,6 +325,7 @@ impl ZellijPlugin for State {
 
     fn render(&mut self, rows: usize, cols: usize) {
         render::render_status_bar(self, rows, cols);
+        self.sync_matrix_order();
     }
 }
 
@@ -578,6 +592,31 @@ impl State {
             !matches!(s.activity, state::Activity::Idle)
                 && now.saturating_sub(s.last_event_ts) >= DONE_TIMEOUT
         })
+    }
+
+    /// Every tab runs its own instance; only the one on the active tab sends.
+    fn is_active_tab_instance(&self) -> bool {
+        let Some(me) = self.plugin_id else { return false };
+        let Some(manifest) = &self.pane_manifest else { return false };
+        manifest.panes.iter().any(|(tab, panes)| {
+            Some(*tab) == self.active_tab_index && panes.iter().any(|p| p.is_plugin && p.id == me)
+        })
+    }
+
+    fn sync_matrix_order(&mut self) {
+        let order = state::matrix_order(&self.sessions);
+        let now = unix_now_ms();
+        let due = order != self.last_matrix_order
+            || now.saturating_sub(self.last_matrix_order_ms) >= MATRIX_ORDER_REFRESH_MS;
+        if order.is_empty() || !due || !self.is_active_tab_instance() {
+            return;
+        }
+        let payload = serde_json::to_string(&order).unwrap_or_default();
+        let mut context = BTreeMap::new();
+        context.insert("type".into(), "matrix_order".into());
+        run_command(&["sh", "-c", MATRIX_ORDER_COMMAND, "zellaude-matrix-order", &payload], context);
+        self.last_matrix_order = order;
+        self.last_matrix_order_ms = now;
     }
 
     fn request_sync(&self) {
