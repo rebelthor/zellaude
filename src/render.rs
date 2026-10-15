@@ -90,7 +90,27 @@ fn readable_on(sym: Color, tab: Color) -> Color {
     }
 }
 
-/// Tab background for a Claude Code `/color` name, dark enough for white text.
+/// Highest perceived brightness (0-255) a custom hex tab may have under white text.
+/// The named colors all sit at or below this.
+const MAX_HEX_LUMA: u32 = 140;
+
+/// `#rrggbb` (any case) as a tab background, scaled down if too bright for white text.
+fn parse_hex(s: &str) -> Option<Color> {
+    let h = s.strip_prefix('#')?;
+    if h.len() != 6 || !h.is_ascii() {
+        return None;
+    }
+    let ch = |i: usize| u8::from_str_radix(&h[i..i + 2], 16).ok();
+    let (r, g, b) = (ch(0)?, ch(2)?, ch(4)?);
+    let luma = (299 * r as u32 + 587 * g as u32 + 114 * b as u32) / 1000;
+    if luma <= MAX_HEX_LUMA {
+        return Some((r, g, b));
+    }
+    let scale = |c: u8| (c as u32 * MAX_HEX_LUMA / luma) as u8;
+    Some((scale(r), scale(g), scale(b)))
+}
+
+/// Tab background for a Claude Code `/color` name or a `#rrggbb` hex, dark enough for white text.
 fn session_color(name: &str) -> Option<Color> {
     match name {
         "red" => Some((190, 55, 60)),
@@ -101,7 +121,7 @@ fn session_color(name: &str) -> Option<Color> {
         "orange" => Some((205, 105, 35)),
         "pink" => Some((200, 75, 145)),
         "cyan" => Some((25, 140, 160)),
-        _ => None,
+        _ => parse_hex(name),
     }
 }
 
@@ -729,6 +749,19 @@ mod background_render_tests {
         // The green done check would vanish on a green tab, so it turns white.
         assert!(buf.contains(&format!("{}✓", fg(255, 255, 255))));
         assert_eq!(readable_on((180, 140, 255), (55, 105, 215)), (180, 140, 255));
+    }
+
+    #[test]
+    fn session_color_accepts_hex() {
+        assert_eq!(session_color("#3769D7"), Some((55, 105, 215)));
+        assert_eq!(session_color("#3769d7"), Some((55, 105, 215)));
+        assert_eq!(session_color("green"), Some((40, 140, 75)));
+        // Too bright for white text: scaled down, hue kept.
+        let (r, g, b) = session_color("#ffffff").unwrap();
+        assert!(r == g && g == b && r < 150);
+        for bad in ["", "#", "#fff", "#12345g", "123456", "#1234567", "default", "#é23456"] {
+            assert_eq!(session_color(bad), None, "{bad}");
+        }
     }
 
     #[test]

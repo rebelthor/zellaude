@@ -30,6 +30,13 @@ if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
   COLOR=$(tail -n 200 "$TRANSCRIPT" | grep -F '"type":"agent-color"' | tail -n 1 | jq -r '.agentColor // empty' 2>/dev/null)
 fi
 
+# A hex from ~/.claude/session-colors/<sessionId>.json wins over the /color name.
+COLOR_FILE="$HOME/.claude/session-colors/$SESSION_ID.json"
+if [ -n "$SESSION_ID" ] && [ -f "$COLOR_FILE" ]; then
+  HEX=$(jq -r '.hex // empty | select(test("^#[0-9a-fA-F]{6}$"))' "$COLOR_FILE" 2>/dev/null)
+  [ -n "$HEX" ] && COLOR="$HEX"
+fi
+
 [ -z "$HOOK_EVENT" ] && exit 0
 
 # Build compact JSON payload
