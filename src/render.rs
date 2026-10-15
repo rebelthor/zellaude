@@ -133,8 +133,18 @@ const BREATH_DEPTH: f32 = 0.35;
 /// A working tab's background at `now_ms`: full color at the top of the
 /// breath, faded toward `toward` at the bottom.
 fn breathe(from: Color, toward: Color, now_ms: u64) -> Color {
-    let phase = (now_ms % BREATH_MS) as f32 / BREATH_MS as f32;
-    let fade = BREATH_DEPTH * (1.0 - (phase * std::f32::consts::TAU).cos()) / 2.0;
+    pulse(from, toward, now_ms, BREATH_MS, BREATH_DEPTH)
+}
+
+/// Amber of a tab waiting on the user, matching the agent matrix's waiting row.
+const ASK_BG: Color = (210, 125, 0);
+/// The agent matrix's waiting pulse period, in ms: faster and deeper than a breath.
+const ASK_PULSE_MS: u64 = 1885;
+const ASK_PULSE_DEPTH: f32 = 0.6;
+
+fn pulse(from: Color, toward: Color, now_ms: u64, period_ms: u64, depth: f32) -> Color {
+    let phase = (now_ms % period_ms) as f32 / period_ms as f32;
+    let fade = depth * (1.0 - (phase * std::f32::consts::TAU).cos()) / 2.0;
     let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * fade).round() as u8;
     (mix(from.0, toward.0), mix(from.1, toward.1), mix(from.2, toward.2))
 }
@@ -420,11 +430,18 @@ fn render_tabs(
 
         let is_active = tab.active;
 
-        let color = session.and_then(|s| s.color.as_deref()).and_then(session_color);
+        // A tab asking the user something pulses amber, active or not.
+        let asking = session.is_some_and(|s| matches!(s.activity, Activity::Waiting));
+        let color = if asking {
+            Some(ASK_BG)
+        } else {
+            session.and_then(|s| s.color.as_deref()).and_then(session_color)
+        };
 
         // Pick tab background color
         let base_bg = match (is_flash_bright, color) {
             (true, _) => FLASH_BG_BRIGHT,
+            (false, Some(c)) if asking => pulse(c, BAR_BG, now_ms, ASK_PULSE_MS, ASK_PULSE_DEPTH),
             (false, Some(c)) if is_active => c,
             (false, Some(c)) => dim(c),
             (false, None) if is_active => TAB_BG_ACTIVE,
@@ -781,6 +798,28 @@ mod background_render_tests {
         assert_eq!(breathe(tab, BAR_BG, 0), tab);
         assert_eq!(breathe(tab, BAR_BG, BREATH_MS), tab);
         assert_eq!(breathe(tab, BAR_BG, BREATH_MS / 2), (46, 79, 156));
+    }
+
+    #[test]
+    fn asking_tab_pulses_amber_over_session_color() {
+        let mut state = State::default();
+        state.settings.elapsed_time = false;
+        state.tabs.push(TabInfo { position: 0, name: "work".into(), ..Default::default() });
+        state.sessions.insert(1, SessionInfo {
+            session_id: "1".into(), pane_id: 1, activity: Activity::Waiting,
+            tab_name: None, tab_index: Some(0), last_event_ts: 0,
+            cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
+            color: Some("blue".into()),
+        });
+        let mut buf = String::new();
+        let mut col = 0;
+        render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+        let now = unix_now_ms();
+        let near = |c: Color| buf.contains(&bg(c.0, c.1, c.2));
+        let amber = (0..50).any(|d| near(pulse(ASK_BG, BAR_BG, now.saturating_sub(d), ASK_PULSE_MS, ASK_PULSE_DEPTH)));
+        assert!(amber, "{buf:?}");
+        assert!(!near(dim((55, 105, 215))));
+        assert_eq!(pulse(ASK_BG, BAR_BG, ASK_PULSE_MS / 2, ASK_PULSE_MS, ASK_PULSE_DEPTH), (102, 68, 28));
     }
 
     #[test]

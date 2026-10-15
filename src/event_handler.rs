@@ -53,6 +53,8 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
 
     let activity = match event {
         "SessionStart" => Activity::Init,
+        // A pending AskUserQuestion blocks on the user, like a permission prompt.
+        "PreToolUse" if payload.tool_name.as_deref() == Some("AskUserQuestion") => Activity::Waiting,
         "PreToolUse" => {
             Activity::Tool(payload.tool_name.clone().unwrap_or_default())
         }

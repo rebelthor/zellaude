@@ -226,7 +226,10 @@ impl ZellijPlugin for State {
                 let stale_changed = self.cleanup_stale_sessions();
                 let flash_changed = self.cleanup_expired_flashes();
                 let has_flashes = self.has_active_flashes();
-                let has_working = self.sessions.values().any(|s| s.activity.is_working());
+                // Working tabs breathe and waiting tabs pulse; both need frequent redraws.
+                let has_working = self.sessions.values().any(|s| {
+                    s.activity.is_working() || matches!(s.activity, state::Activity::Waiting)
+                });
                 if has_flashes || has_working {
                     set_timeout(FLASH_TICK);
                 } else {
