@@ -226,12 +226,13 @@ impl ZellijPlugin for State {
                 let stale_changed = self.cleanup_stale_sessions();
                 let flash_changed = self.cleanup_expired_flashes();
                 let has_flashes = self.has_active_flashes();
-                if has_flashes {
+                let has_working = self.sessions.values().any(|s| s.activity.is_working());
+                if has_flashes || has_working {
                     set_timeout(FLASH_TICK);
                 } else {
                     set_timeout(TIMER_INTERVAL);
                 }
-                has_flashes || stale_changed || flash_changed || self.has_elapsed_display()
+                has_flashes || has_working || stale_changed || flash_changed || self.has_elapsed_display()
             }
             Event::PermissionRequestResult(_) => {
                 // Now that permissions are granted, mark as non-selectable

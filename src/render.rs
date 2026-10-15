@@ -105,6 +105,20 @@ fn session_color(name: &str) -> Option<Color> {
     }
 }
 
+/// One breath of a working tab's symbol, in ms.
+const BREATH_MS: u64 = 2000;
+/// How far the symbol fades toward the tab background at the bottom of a breath.
+const BREATH_DEPTH: f32 = 0.6;
+
+/// A working symbol's color at `now_ms`: full color at the top of the breath,
+/// faded toward the tab background at the bottom.
+fn breathe(sym: Color, tab: Color, now_ms: u64) -> Color {
+    let phase = (now_ms % BREATH_MS) as f32 / BREATH_MS as f32;
+    let fade = BREATH_DEPTH * (1.0 - (phase * std::f32::consts::TAU).cos()) / 2.0;
+    let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * fade).round() as u8;
+    (mix(sym.0, tab.0), mix(sym.1, tab.1), mix(sym.2, tab.2))
+}
+
 /// Inactive tabs keep their hue but sink toward the bar background.
 fn dim(c: Color) -> Color {
     let mix = |a: u8, b: u8| ((a as u16 * 45 + b as u16 * 55) / 100) as u8;
@@ -410,16 +424,21 @@ fn render_tabs(
             let s = session.unwrap();
             let style = activity_style(&s.activity);
 
+            let sym = if color.is_some() {
+                readable_on((style.r, style.g, style.b), tab_bg)
+            } else {
+                (style.r, style.g, style.b)
+            };
+            let sym = if s.activity.is_working() { breathe(sym, tab_bg, now_ms) } else { sym };
             let (sym_fg, name_fg, name_bold) = if is_flash_bright {
                 (fg(255, 255, 80), fg(255, 255, 80), true)
             } else if color.is_some() {
-                let (r, g, b) = readable_on((style.r, style.g, style.b), tab_bg);
                 let name = if is_active { fg(255, 255, 255) } else { fg(225, 222, 235) };
-                (fg(r, g, b), name, is_active)
+                (fg(sym.0, sym.1, sym.2), name, is_active)
             } else if is_active {
-                (fg(style.r, style.g, style.b), fg(255, 255, 255), true)
+                (fg(sym.0, sym.1, sym.2), fg(255, 255, 255), true)
             } else {
-                (fg(style.r, style.g, style.b), fg(120, 220, 220), false)
+                (fg(sym.0, sym.1, sym.2), fg(120, 220, 220), false)
             };
 
             // Leading space
@@ -708,5 +727,14 @@ mod background_render_tests {
         // The green done check would vanish on a green tab, so it turns white.
         assert!(buf.contains(&format!("{}✓", fg(255, 255, 255))));
         assert_eq!(readable_on((180, 140, 255), (55, 105, 215)), (180, 140, 255));
+    }
+
+    #[test]
+    fn working_symbol_breathes_toward_tab_color() {
+        let (sym, tab) = ((255, 170, 50), (55, 105, 215));
+        assert_eq!(breathe(sym, tab, 0), sym);
+        assert_eq!(breathe(sym, tab, BREATH_MS), sym);
+        let bottom = breathe(sym, tab, BREATH_MS / 2);
+        assert_eq!(bottom, (135, 131, 149));
     }
 }

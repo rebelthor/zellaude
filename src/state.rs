@@ -32,6 +32,13 @@ pub enum Activity {
     Idle,
 }
 
+impl Activity {
+    /// Thinking or running a tool: the tab symbol breathes while this holds.
+    pub fn is_working(&self) -> bool {
+        matches!(self, Activity::Thinking | Activity::Tool(_))
+    }
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct SessionInfo {
     pub session_id: String,
