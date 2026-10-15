@@ -90,6 +90,7 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
             last_ts_ms: 0,
             background: Default::default(),
             background_ts_ms: 0,
+            color: None,
         });
 
     if matches!(activity, Activity::Waiting) {
@@ -125,6 +126,9 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
     }
     if let Some(cwd) = payload.cwd {
         session.cwd = Some(cwd);
+    }
+    if let Some(color) = payload.color {
+        session.color = (color != "default").then_some(color);
     }
     if let Some((idx, name)) = tab_index.zip(tab_name) {
         session.tab_index = Some(idx);

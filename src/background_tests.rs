@@ -93,3 +93,20 @@ fn old_hook_payloads_remain_valid() {
     assert_eq!(state.sessions[&1].activity, Activity::Done);
     assert_eq!(state.sessions[&1].background.badge(), "");
 }
+
+#[test]
+fn session_color_sets_keeps_and_resets() {
+    let mut state = State::default();
+    fn send(state: &mut State, name: &str, ts: u64, color: Option<&str>) {
+        let payload: HookPayload = serde_json::from_value(json!({
+            "pane_id": 1, "session_id": "one", "hook_event": name, "ts_ms": ts, "color": color
+        })).unwrap();
+        handle_hook_event(state, payload);
+    }
+    send(&mut state, "SessionStart", 100, Some("purple"));
+    send(&mut state, "PreToolUse", 200, None);
+    send(&mut state, "UserPromptSubmit", 300, Some("default"));
+    assert_eq!(state.sessions[&1].color, None);
+    send(&mut state, "Stop", 400, Some("cyan"));
+    assert_eq!(state.sessions[&1].color.as_deref(), Some("cyan"));
+}

@@ -21,6 +21,14 @@ HOOK_EVENT=$(echo "$INPUT" | jq -r '.hook_event_name // empty')
 SESSION_ID=$(echo "$INPUT" | jq -r '.session_id // empty')
 TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
+TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
+
+# Session color from /color. Claude Code re-appends an agent-color entry to the
+# transcript every few turns, so the tail is enough even for huge transcripts.
+COLOR=""
+if [ -n "$TRANSCRIPT" ] && [ -f "$TRANSCRIPT" ]; then
+  COLOR=$(tail -n 200 "$TRANSCRIPT" | grep -F '"type":"agent-color"' | tail -n 1 | jq -r '.agentColor // empty' 2>/dev/null)
+fi
 
 [ -z "$HOOK_EVENT" ] && exit 0
 
@@ -31,6 +39,7 @@ PAYLOAD=$(jq -nc \
   --arg hook_event "$HOOK_EVENT" \
   --arg tool_name "$TOOL_NAME" \
   --arg cwd "$CWD" \
+  --arg color "$COLOR" \
   --arg zellij_session "$ZELLIJ_SESSION_NAME" \
   --arg term_program "${TERM_PROGRAM:-}" \
   --arg ts_ms "$TS_MS" \
@@ -40,6 +49,7 @@ PAYLOAD=$(jq -nc \
     hook_event: $hook_event,
     tool_name: (if $tool_name == "" then null else $tool_name end),
     cwd: (if $cwd == "" then null else $cwd end),
+    color: (if $color == "" then null else $color end),
     zellij_session: $zellij_session,
     term_program: (if $term_program == "" then null else $term_program end),
     ts_ms: ($ts_ms | tonumber)

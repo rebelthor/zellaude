@@ -56,10 +56,13 @@ plugin after changing this path; the zellij server must reload the plugin to pic
 ## Build and test
 
 `cargo` is not on `PATH`; it lives at
-`~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo`.
+`~/.rustup/toolchains/stable-aarch64-apple-darwin/bin/cargo`. Homebrew's `rustc` comes first on
+`PATH` and has no `wasm32-wasip1` standard library, so put the rustup toolchain first for the
+WASM build:
 
 ```bash
-cargo build --release   # produces target/wasm32-wasip1/release/zellaude.wasm
+T=~/.rustup/toolchains/stable-aarch64-apple-darwin/bin
+PATH=$T:$PATH cargo build --release   # produces target/wasm32-wasip1/release/zellaude.wasm
 ```
 
 `.cargo/config.toml` already defaults `--target` to `wasm32-wasip1`, so a bare
@@ -87,7 +90,7 @@ cp target/wasm32-wasip1/release/zellaude.wasm \
 
 `~/.config/zellij/plugins/zellaude.wasm` is a symlink to that path. Back up the
 previous `.wasm` alongside it before overwriting, and record the new sha256 in
-`~/sync/projects/zellij-config/CLAUDE.md`, that file is the source of truth for
+`~/sync/projects/zellij-config/HISTORY.md`, that file is the source of truth for
 which build is deployed, and a stale hash there has caused real confusion.
 
 A running zellij server keeps the old WASM in memory. To pick up a new build

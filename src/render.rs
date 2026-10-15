@@ -75,6 +75,30 @@ const PREFIX_BG_SETTINGS: Color = (100, 70, 140);
 const TAB_BG_ACTIVE: Color = (140, 100, 200);
 const TAB_BG_INACTIVE: Color = (80, 75, 110);
 const FLASH_BG_BRIGHT: Color = (80, 80, 30);
+/// Dark chip behind the activity symbol on a colored tab, so a status color
+/// never vanishes into a tab of the same hue.
+const SYMBOL_CHIP_BG: Color = (40, 38, 56);
+
+/// Tab background for a Claude Code `/color` name, dark enough for white text.
+fn session_color(name: &str) -> Option<Color> {
+    match name {
+        "red" => Some((190, 55, 60)),
+        "blue" => Some((55, 105, 215)),
+        "green" => Some((40, 140, 75)),
+        "yellow" => Some((165, 135, 20)),
+        "purple" => Some((135, 85, 200)),
+        "orange" => Some((205, 105, 35)),
+        "pink" => Some((200, 75, 145)),
+        "cyan" => Some((25, 140, 160)),
+        _ => None,
+    }
+}
+
+/// Inactive tabs keep their hue but sink toward the bar background.
+fn dim(c: Color) -> Color {
+    let mix = |a: u8, b: u8| ((a as u16 * 45 + b as u16 * 55) / 100) as u8;
+    (mix(c.0, BAR_BG.0), mix(c.1, BAR_BG.1), mix(c.2, BAR_BG.2))
+}
 
 /// Write a powerline arrow: fg=from_bg, bg=to_bg, then separator char.
 fn arrow(buf: &mut String, col: &mut usize, from: Color, to: Color) {
@@ -349,13 +373,15 @@ fn render_tabs(
 
         let is_active = tab.active;
 
+        let color = session.and_then(|s| s.color.as_deref()).and_then(session_color);
+
         // Pick tab background color
-        let tab_bg = if is_flash_bright {
-            FLASH_BG_BRIGHT
-        } else if is_active {
-            TAB_BG_ACTIVE
-        } else {
-            TAB_BG_INACTIVE
+        let tab_bg = match (is_flash_bright, color) {
+            (true, _) => FLASH_BG_BRIGHT,
+            (false, Some(c)) if is_active => c,
+            (false, Some(c)) => dim(c),
+            (false, None) if is_active => TAB_BG_ACTIVE,
+            (false, None) => TAB_BG_INACTIVE,
         };
 
         // Arrow: close previous segment, then open this tab
@@ -377,13 +403,19 @@ fn render_tabs(
                 (fg(255, 255, 80), fg(255, 255, 80), true)
             } else if is_active {
                 (fg(style.r, style.g, style.b), fg(255, 255, 255), true)
+            } else if color.is_some() {
+                (fg(style.r, style.g, style.b), fg(225, 222, 235), false)
             } else {
                 (fg(style.r, style.g, style.b), fg(120, 220, 220), false)
             };
 
-            // Leading space
+            // Leading space; a colored tab puts symbol and badge on a dark chip.
             let _ = write!(buf, "{tab_bg_str} ");
             *col += 1;
+            let chip = color.is_some() && !is_flash_bright;
+            if chip {
+                let _ = write!(buf, "{}", bg(SYMBOL_CHIP_BG.0, SYMBOL_CHIP_BG.1, SYMBOL_CHIP_BG.2));
+            }
 
             // Symbol
             let _ = write!(buf, "{sym_fg}{}", style.symbol);
@@ -393,6 +425,9 @@ fn render_tabs(
             let badge = &background_badges[i];
             let _ = write!(buf, "{}{badge}", fg(200, 190, 240));
             *col += badge.len();
+            if chip {
+                let _ = write!(buf, "{tab_bg_str}");
+            }
 
             // Space + name
             if !truncated.is_empty() {
@@ -630,6 +665,7 @@ mod background_render_tests {
                 session_id: pane.to_string(), pane_id: pane, activity,
                 tab_name: None, tab_index: Some(0), last_event_ts: 0,
                 cwd: None, last_ts_ms: 0, background, background_ts_ms: 0,
+                color: None,
             });
         }
         for width in 1..80 {
@@ -645,5 +681,24 @@ mod background_render_tests {
                 assert!(state.click_regions[0].is_waiting);
             }
         }
+    }
+
+    #[test]
+    fn colored_session_paints_tab_and_chips_symbol() {
+        let mut state = State::default();
+        state.settings.elapsed_time = false;
+        state.tabs.push(TabInfo { position: 0, name: "work".into(), active: true, ..Default::default() });
+        state.sessions.insert(1, SessionInfo {
+            session_id: "1".into(), pane_id: 1, activity: Activity::Done,
+            tab_name: None, tab_index: Some(0), last_event_ts: 0,
+            cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
+            color: Some("blue".into()),
+        });
+        let mut buf = String::new();
+        let mut col = 0;
+        render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+        assert!(buf.contains(&bg(55, 105, 215)));
+        assert!(buf.contains(&bg(SYMBOL_CHIP_BG.0, SYMBOL_CHIP_BG.1, SYMBOL_CHIP_BG.2)));
+        assert!(!buf.contains(&bg(TAB_BG_ACTIVE.0, TAB_BG_ACTIVE.1, TAB_BG_ACTIVE.2)));
     }
 }

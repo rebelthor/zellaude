@@ -47,6 +47,9 @@ pub struct SessionInfo {
     pub background: BackgroundActivity,
     #[serde(default)]
     pub background_ts_ms: u64,
+    /// Session color set with Claude Code's `/color`; None means default.
+    #[serde(default)]
+    pub color: Option<String>,
 }
 
 impl SessionInfo {
@@ -101,6 +104,7 @@ pub struct HookPayload {
     pub term_program: Option<String>,
     pub ts_ms: Option<u64>,
     pub background: Option<BackgroundActivity>,
+    pub color: Option<String>,
 }
 
 /// A tab rename zellaude has issued but not yet seen reflected in a TabUpdate.
