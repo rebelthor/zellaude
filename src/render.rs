@@ -105,18 +105,18 @@ fn session_color(name: &str) -> Option<Color> {
     }
 }
 
-/// One breath of a working tab's symbol, in ms.
+/// One breath of a working tab, in ms.
 const BREATH_MS: u64 = 2000;
-/// How far the symbol fades toward the tab background at the bottom of a breath.
-const BREATH_DEPTH: f32 = 0.6;
+/// How far the tab fades toward the bar background at the bottom of a breath.
+const BREATH_DEPTH: f32 = 0.35;
 
-/// A working symbol's color at `now_ms`: full color at the top of the breath,
-/// faded toward the tab background at the bottom.
-fn breathe(sym: Color, tab: Color, now_ms: u64) -> Color {
+/// A working tab's background at `now_ms`: full color at the top of the
+/// breath, faded toward `toward` at the bottom.
+fn breathe(from: Color, toward: Color, now_ms: u64) -> Color {
     let phase = (now_ms % BREATH_MS) as f32 / BREATH_MS as f32;
     let fade = BREATH_DEPTH * (1.0 - (phase * std::f32::consts::TAU).cos()) / 2.0;
     let mix = |a: u8, b: u8| (a as f32 + (b as f32 - a as f32) * fade).round() as u8;
-    (mix(sym.0, tab.0), mix(sym.1, tab.1), mix(sym.2, tab.2))
+    (mix(from.0, toward.0), mix(from.1, toward.1), mix(from.2, toward.2))
 }
 
 /// Inactive tabs keep their hue but sink toward the bar background.
@@ -401,13 +401,16 @@ fn render_tabs(
         let color = session.and_then(|s| s.color.as_deref()).and_then(session_color);
 
         // Pick tab background color
-        let tab_bg = match (is_flash_bright, color) {
+        let base_bg = match (is_flash_bright, color) {
             (true, _) => FLASH_BG_BRIGHT,
             (false, Some(c)) if is_active => c,
             (false, Some(c)) => dim(c),
             (false, None) if is_active => TAB_BG_ACTIVE,
             (false, None) => TAB_BG_INACTIVE,
         };
+        // A working tab breathes toward the bar background; the flash wins.
+        let working = session.is_some_and(|s| s.activity.is_working());
+        let tab_bg = if working && !is_flash_bright { breathe(base_bg, BAR_BG, now_ms) } else { base_bg };
 
         // Arrow: close previous segment, then open this tab
         if prev_bg == prefix_bg {
@@ -425,11 +428,10 @@ fn render_tabs(
             let style = activity_style(&s.activity);
 
             let sym = if color.is_some() {
-                readable_on((style.r, style.g, style.b), tab_bg)
+                readable_on((style.r, style.g, style.b), base_bg)
             } else {
                 (style.r, style.g, style.b)
             };
-            let sym = if s.activity.is_working() { breathe(sym, tab_bg, now_ms) } else { sym };
             let (sym_fg, name_fg, name_bold) = if is_flash_bright {
                 (fg(255, 255, 80), fg(255, 255, 80), true)
             } else if color.is_some() {
@@ -730,11 +732,10 @@ mod background_render_tests {
     }
 
     #[test]
-    fn working_symbol_breathes_toward_tab_color() {
-        let (sym, tab) = ((255, 170, 50), (55, 105, 215));
-        assert_eq!(breathe(sym, tab, 0), sym);
-        assert_eq!(breathe(sym, tab, BREATH_MS), sym);
-        let bottom = breathe(sym, tab, BREATH_MS / 2);
-        assert_eq!(bottom, (135, 131, 149));
+    fn working_tab_breathes_toward_bar() {
+        let tab = (55, 105, 215);
+        assert_eq!(breathe(tab, BAR_BG, 0), tab);
+        assert_eq!(breathe(tab, BAR_BG, BREATH_MS), tab);
+        assert_eq!(breathe(tab, BAR_BG, BREATH_MS / 2), (46, 79, 156));
     }
 }
