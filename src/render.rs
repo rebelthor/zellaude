@@ -75,6 +75,8 @@ const PREFIX_BG_SETTINGS: Color = (100, 70, 140);
 const TAB_BG_ACTIVE: Color = (140, 100, 200);
 const TAB_BG_INACTIVE: Color = (80, 75, 110);
 const FLASH_BG_BRIGHT: Color = (80, 80, 30);
+/// Arrowhead of a tab whose only work is in the background, the badge's color.
+const BACKGROUND_TIP: Color = (200, 190, 240);
 /// How far apart two colors must be (sum of channel differences) for a status
 /// symbol to stay readable on a colored tab.
 const MIN_SYMBOL_CONTRAST: u16 = 160;
@@ -451,12 +453,20 @@ fn render_tabs(
         // A working tab breathes toward the bar background; the flash wins.
         let working = session.is_some_and(|s| s.activity.is_working());
         let tab_bg = if working && !is_flash_bright { breathe(base_bg, BAR_BG, now_ms) } else { base_bg };
-        // A working tab's closing arrowhead takes the steady activity color.
+        // Background agents or jobs in any pane of this tab; watchers run for hours, so they don't count.
+        let background_busy = state
+            .sessions
+            .values()
+            .filter(|s| s.tab_index == Some(tab.position))
+            .any(|s| s.background.agents > 0 || s.background.jobs > 0);
+        // A working tab's closing arrowhead takes the steady activity color; a tab with only
+        // background work takes the badge's lavender.
         let tip = match session {
             Some(s) if working && !is_flash_bright => {
                 let style = activity_style(&s.activity);
                 readable_on((style.r, style.g, style.b), base_bg)
             }
+            Some(_) if background_busy && !is_flash_bright => readable_on(BACKGROUND_TIP, base_bg),
             _ => tab_bg,
         };
 
@@ -845,5 +855,31 @@ mod background_render_tests {
         let mut col = 0;
         render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
         assert!(!buf.contains(&tip));
+    }
+
+    #[test]
+    fn background_agent_lights_arrowhead_but_watcher_does_not() {
+        let mut state = State::default();
+        state.settings.elapsed_time = false;
+        state.tabs.push(TabInfo { position: 0, name: "work".into(), ..Default::default() });
+        state.sessions.insert(1, SessionInfo {
+            session_id: "1".into(), pane_id: 1, activity: Activity::Done,
+            tab_name: None, tab_index: Some(0), last_event_ts: 0,
+            cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
+            color: Some("blue".into()),
+        });
+        let tip = format!("{}{}{SEPARATOR}", fg(BACKGROUND_TIP.0, BACKGROUND_TIP.1, BACKGROUND_TIP.2), bg(BAR_BG.0, BAR_BG.1, BAR_BG.2));
+        let render = |state: &mut State| {
+            let mut buf = String::new();
+            let mut col = 0;
+            render_tabs(state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+            buf
+        };
+
+        state.sessions.get_mut(&1).unwrap().background.agents = 1;
+        assert!(render(&mut state).ends_with(&tip));
+
+        state.sessions.get_mut(&1).unwrap().background = crate::state::BackgroundActivity { watchers: 1, ..Default::default() };
+        assert!(!render(&mut state).contains(&tip));
     }
 }
