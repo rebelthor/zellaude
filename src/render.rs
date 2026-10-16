@@ -66,6 +66,7 @@ fn display_width(s: &str) -> usize {
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
 const STRIKE: &str = "\x1b[9m";
+const CLOSED_SYMBOL: &str = "×";
 const ELAPSED_THRESHOLD: u64 = 30;
 const SEPARATOR: &str = "\u{e0b0}";
 
@@ -506,9 +507,10 @@ fn render_tabs(
             let _ = write!(buf, "{tab_bg_str} ");
             *col += 1;
 
-            // Symbol
-            let _ = write!(buf, "{sym_fg}{}", style.symbol);
-            *col += display_width(style.symbol);
+            // Symbol; a session safe to close shows a × instead.
+            let symbol = if s.closed { CLOSED_SYMBOL } else { style.symbol };
+            let _ = write!(buf, "{sym_fg}{symbol}");
+            *col += display_width(symbol);
 
             // Adjacent ASCII badge adds one column for a single background run.
             let badge = &background_badges[i];
@@ -901,6 +903,7 @@ mod background_render_tests {
         let mut col = 0;
         render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
         assert!(buf.contains(STRIKE));
+        assert!(buf.contains(CLOSED_SYMBOL));
 
         state.sessions.get_mut(&1).unwrap().closed = false;
         let mut buf = String::new();
