@@ -379,7 +379,8 @@ fn render_tabs(
         })
         .collect();
     let fixed_width = fixed_widths.iter().sum::<usize>();
-    let arrows_width = 2 * count;
+    // Two arrows per tab plus the one closing the last tab.
+    let arrows_width = 2 * count + 1;
     let available_name_width = cols.saturating_sub(prefix_width + arrows_width + fixed_width);
     let natural_name_widths: Vec<usize> = tabs.iter().map(|tab| display_width(&tab.name)).collect();
     let natural_name_width = natural_name_widths.iter().sum::<usize>();
@@ -395,8 +396,7 @@ fn render_tabs(
 
     for (i, tab) in tabs.iter().enumerate() {
         // Stop if we'd overflow — need room for at least arrow + closing arrow
-        let arrows_needed = if prev_bg == prefix_bg { 1 } else { 2 };
-        if *col + arrows_needed + fixed_widths[i] > cols {
+        if *col + 2 + fixed_widths[i] > cols {
             break;
         }
 
@@ -460,13 +460,10 @@ fn render_tabs(
             _ => tab_bg,
         };
 
-        // Arrow: close previous segment, then open this tab
-        if prev_bg == prefix_bg {
-            arrow(buf, col, prev_bg, tab_bg);
-        } else {
-            arrow(buf, col, prev_tip, BAR_BG);
-            arrow(buf, col, BAR_BG, tab_bg);
-        }
+        // Close the previous segment (the prefix too) into a dark gap, then open this tab,
+        // so the first tab's edge matches the others.
+        arrow(buf, col, prev_tip, BAR_BG);
+        arrow(buf, col, BAR_BG, tab_bg);
 
         let tab_bg_str = bg(tab_bg.0, tab_bg.1, tab_bg.2);
         let region_start = *col;
