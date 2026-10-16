@@ -142,3 +142,22 @@ fn closed_mark_holds_only_from_stop_until_the_next_event() {
     closed(&mut state, "UserPromptSubmit", 300, true);
     assert!(!state.sessions[&1].closed);
 }
+
+#[test]
+fn snapshot_sets_closed_only_after_the_last_foreground_event() {
+    let mut state = State::default();
+    let snap = |state: &mut State, ts: u64, flag: bool| {
+        let payload: HookPayload = serde_json::from_value(json!({
+            "pane_id": 1, "session_id": "one", "hook_event": "BackgroundStatus", "ts_ms": ts,
+            "background": BackgroundActivity::default(), "closed": flag
+        })).unwrap();
+        handle_hook_event(state, payload);
+    };
+    event(&mut state, "Stop", 200, "one", None);
+    snap(&mut state, 150, true);
+    assert!(!state.sessions[&1].closed);
+    snap(&mut state, 300, true);
+    assert!(state.sessions[&1].closed);
+    snap(&mut state, 400, false);
+    assert!(!state.sessions[&1].closed);
+}

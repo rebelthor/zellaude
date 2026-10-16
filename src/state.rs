@@ -115,8 +115,9 @@ pub struct HookPayload {
     pub ts_ms: Option<u64>,
     pub background: Option<BackgroundActivity>,
     pub color: Option<String>,
+    /// Safe to close, from a Stop hook or a background snapshot; absent from older senders.
     #[serde(default)]
-    pub closed: bool,
+    pub closed: Option<bool>,
 }
 
 /// A tab rename zellaude has issued but not yet seen reflected in a TabUpdate.

@@ -486,6 +486,8 @@ fn render_tabs(
         if is_claude {
             let s = session.unwrap();
             let style = activity_style(&s.activity);
+            // Safe to close shows only while the session sits idle.
+            let closed = s.closed && matches!(s.activity, Activity::Done | Activity::AgentDone | Activity::Idle);
 
             let sym = if color.is_some() {
                 readable_on((style.r, style.g, style.b), base_bg)
@@ -508,7 +510,7 @@ fn render_tabs(
             *col += 1;
 
             // Symbol; a session safe to close shows a × instead.
-            let symbol = if s.closed { CLOSED_SYMBOL } else { style.symbol };
+            let symbol = if closed { CLOSED_SYMBOL } else { style.symbol };
             let _ = write!(buf, "{sym_fg}{symbol}");
             *col += display_width(symbol);
 
@@ -521,7 +523,7 @@ fn render_tabs(
             if !truncated.is_empty() {
                 let bold_str = if name_bold { BOLD } else { "" };
                 // A session wrapped up as safe to close has its tab name struck through.
-                let strike_str = if s.closed { STRIKE } else { "" };
+                let strike_str = if closed { STRIKE } else { "" };
                 let _ = write!(buf, " {bold_str}{strike_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
                 *col += 1 + display_width(&truncated);
             }

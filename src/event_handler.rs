@@ -35,6 +35,13 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
                 if let Some(color) = payload.color {
                     session.color = (color != "default").then_some(color);
                 }
+                // A safe-to-close mark counts only if taken after the last foreground event;
+                // a cleared one always wins.
+                match payload.closed {
+                    Some(false) => session.closed = false,
+                    Some(true) if ts_ms > session.last_ts_ms => session.closed = true,
+                    _ => {}
+                }
             }
         }
         return;
@@ -124,7 +131,7 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
     }
     session.activity = activity;
     // Safe to close only as of the turn's end; any later event means work resumed.
-    session.closed = event == "Stop" && payload.closed;
+    session.closed = event == "Stop" && payload.closed == Some(true);
     session.last_event_ts = crate::state::unix_now();
     if let Some(ts_ms) = payload.ts_ms {
         session.last_ts_ms = ts_ms;
