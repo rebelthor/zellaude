@@ -96,7 +96,7 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
             last_ts_ms: 0,
             background: Default::default(),
             background_ts_ms: 0,
-            color: None,
+            color: None, closed: false,
         });
 
     if matches!(activity, Activity::Waiting) {
@@ -123,6 +123,8 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
         session.background_ts_ms = 0;
     }
     session.activity = activity;
+    // Safe to close only as of the turn's end; any later event means work resumed.
+    session.closed = event == "Stop" && payload.closed;
     session.last_event_ts = crate::state::unix_now();
     if let Some(ts_ms) = payload.ts_ms {
         session.last_ts_ms = ts_ms;

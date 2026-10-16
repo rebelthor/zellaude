@@ -123,3 +123,22 @@ fn background_snapshot_carries_session_color() {
     assert_eq!(state.sessions[&1].color.as_deref(), Some("orange"));
     assert_eq!(state.sessions[&1].activity, Activity::Init);
 }
+
+#[test]
+fn closed_mark_holds_only_from_stop_until_the_next_event() {
+    let mut state = State::default();
+    let closed = |state: &mut State, name: &str, ts: u64, flag: bool| {
+        let payload: HookPayload = serde_json::from_value(json!({
+            "pane_id": 1, "session_id": "one", "hook_event": name, "ts_ms": ts, "closed": flag
+        })).unwrap();
+        handle_hook_event(state, payload);
+    };
+    event(&mut state, "SessionStart", 100, "one", None);
+    assert!(!state.sessions[&1].closed);
+    closed(&mut state, "Stop", 200, true);
+    assert!(state.sessions[&1].closed);
+    event(&mut state, "BackgroundStatus", 250, "one", Some(BackgroundActivity::default()));
+    assert!(state.sessions[&1].closed);
+    closed(&mut state, "UserPromptSubmit", 300, true);
+    assert!(!state.sessions[&1].closed);
+}

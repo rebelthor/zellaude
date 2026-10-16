@@ -57,6 +57,9 @@ pub struct SessionInfo {
     /// Session color set with Claude Code's `/color`; None means default.
     #[serde(default)]
     pub color: Option<String>,
+    /// The session was wrapped up as safe to close; cleared by its next event.
+    #[serde(default)]
+    pub closed: bool,
 }
 
 impl SessionInfo {
@@ -112,6 +115,8 @@ pub struct HookPayload {
     pub ts_ms: Option<u64>,
     pub background: Option<BackgroundActivity>,
     pub color: Option<String>,
+    #[serde(default)]
+    pub closed: bool,
 }
 
 /// A tab rename zellaude has issued but not yet seen reflected in a TabUpdate.

@@ -65,6 +65,7 @@ fn display_width(s: &str) -> usize {
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
+const STRIKE: &str = "\x1b[9m";
 const ELAPSED_THRESHOLD: u64 = 30;
 const SEPARATOR: &str = "\u{e0b0}";
 
@@ -517,7 +518,9 @@ fn render_tabs(
             // Space + name
             if !truncated.is_empty() {
                 let bold_str = if name_bold { BOLD } else { "" };
-                let _ = write!(buf, " {bold_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
+                // A session wrapped up as safe to close has its tab name struck through.
+                let strike_str = if s.closed { STRIKE } else { "" };
+                let _ = write!(buf, " {bold_str}{strike_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
                 *col += 1 + display_width(&truncated);
             }
             // Elapsed suffix
@@ -751,7 +754,7 @@ mod background_render_tests {
                 session_id: pane.to_string(), pane_id: pane, activity,
                 tab_name: None, tab_index: Some(0), last_event_ts: 0,
                 cwd: None, last_ts_ms: 0, background, background_ts_ms: 0,
-                color: None,
+                color: None, closed: false,
             });
         }
         for width in 1..80 {
@@ -778,7 +781,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Done,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("green".into()),
+            color: Some("green".into()), closed: false,
         });
         let mut buf = String::new();
         let mut col = 0;
@@ -820,7 +823,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Waiting,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()),
+            color: Some("blue".into()), closed: false,
         });
         let mut buf = String::new();
         let mut col = 0;
@@ -842,7 +845,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Tool("Bash".into()),
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()),
+            color: Some("blue".into()), closed: false,
         });
         let tip = format!("{}{}{SEPARATOR}", fg(255, 170, 50), bg(BAR_BG.0, BAR_BG.1, BAR_BG.2));
         let mut buf = String::new();
@@ -866,7 +869,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Done,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()),
+            color: Some("blue".into()), closed: false,
         });
         let tip = format!("{}{}{SEPARATOR}", fg(BACKGROUND_TIP.0, BACKGROUND_TIP.1, BACKGROUND_TIP.2), bg(BAR_BG.0, BAR_BG.1, BAR_BG.2));
         let render = |state: &mut State| {
@@ -881,5 +884,28 @@ mod background_render_tests {
 
         state.sessions.get_mut(&1).unwrap().background = crate::state::BackgroundActivity { watchers: 1, ..Default::default() };
         assert!(!render(&mut state).contains(&tip));
+    }
+
+    #[test]
+    fn closed_session_strikes_through_tab_name() {
+        let mut state = State::default();
+        state.settings.elapsed_time = false;
+        state.tabs.push(TabInfo { position: 0, name: "work".into(), ..Default::default() });
+        state.sessions.insert(1, SessionInfo {
+            session_id: "1".into(), pane_id: 1, activity: Activity::Done,
+            tab_name: None, tab_index: Some(0), last_event_ts: 0,
+            cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
+            color: Some("blue".into()), closed: true,
+        });
+        let mut buf = String::new();
+        let mut col = 0;
+        render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+        assert!(buf.contains(STRIKE));
+
+        state.sessions.get_mut(&1).unwrap().closed = false;
+        let mut buf = String::new();
+        let mut col = 0;
+        render_tabs(&mut state, &mut buf, &mut col, 80, PREFIX_BG, 0);
+        assert!(!buf.contains(STRIKE));
     }
 }

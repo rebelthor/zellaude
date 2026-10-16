@@ -39,6 +39,14 @@ fi
 
 [ -z "$HOOK_EVENT" ] && exit 0
 
+# A session wrapped up as safe to close (`session-next --closed "safe ..."` writes this file;
+# the next prompt removes it). The plugin applies it only on Stop.
+CLOSED=false
+CLOSED_FILE="${SESSION_NEXT_DIR:-$HOME/.claude/session-next}/$SESSION_ID.closed"
+if [ "$HOOK_EVENT" = "Stop" ] && [ -n "$SESSION_ID" ] && head -n 1 "$CLOSED_FILE" 2>/dev/null | grep -qi '^safe'; then
+  CLOSED=true
+fi
+
 # Build compact JSON payload
 PAYLOAD=$(jq -nc \
   --arg pane_id "$ZELLIJ_PANE_ID" \
@@ -50,6 +58,7 @@ PAYLOAD=$(jq -nc \
   --arg zellij_session "$ZELLIJ_SESSION_NAME" \
   --arg term_program "${TERM_PROGRAM:-}" \
   --arg ts_ms "$TS_MS" \
+  --argjson closed "$CLOSED" \
   '{
     pane_id: ($pane_id | tonumber),
     session_id: $session_id,
@@ -59,7 +68,8 @@ PAYLOAD=$(jq -nc \
     color: (if $color == "" then null else $color end),
     zellij_session: $zellij_session,
     term_program: (if $term_program == "" then null else $term_program end),
-    ts_ms: ($ts_ms | tonumber)
+    ts_ms: ($ts_ms | tonumber),
+    closed: $closed
   }')
 
 # Permission request: bell + desktop notification
