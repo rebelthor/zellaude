@@ -65,6 +65,7 @@ fn display_width(s: &str) -> usize {
 
 const RESET: &str = "\x1b[0m";
 const BOLD: &str = "\x1b[1m";
+const UNDERLINE: &str = "\x1b[4m";
 const ELAPSED_THRESHOLD: u64 = 30;
 const SEPARATOR: &str = "\u{e0b0}";
 
@@ -149,9 +150,10 @@ fn pulse(from: Color, toward: Color, now_ms: u64, period_ms: u64, depth: f32) ->
     (mix(from.0, toward.0), mix(from.1, toward.1), mix(from.2, toward.2))
 }
 
-/// Inactive tabs keep their hue but sink toward the bar background.
+/// Inactive tabs keep their hue but sink far toward the bar background, so the
+/// active tab stands out.
 fn dim(c: Color) -> Color {
-    let mix = |a: u8, b: u8| ((a as u16 * 45 + b as u16 * 55) / 100) as u8;
+    let mix = |a: u8, b: u8| ((a as u16 * 30 + b as u16 * 70) / 100) as u8;
     (mix(c.0, BAR_BG.0), mix(c.1, BAR_BG.1), mix(c.2, BAR_BG.2))
 }
 
@@ -482,7 +484,7 @@ fn render_tabs(
             let (sym_fg, name_fg, name_bold) = if is_flash_bright {
                 (fg(255, 255, 80), fg(255, 255, 80), true)
             } else if color.is_some() {
-                let name = if is_active { fg(255, 255, 255) } else { fg(225, 222, 235) };
+                let name = if is_active { fg(255, 255, 255) } else { fg(170, 165, 185) };
                 (fg(sym.0, sym.1, sym.2), name, is_active)
             } else if is_active {
                 (fg(sym.0, sym.1, sym.2), fg(255, 255, 255), true)
@@ -505,8 +507,10 @@ fn render_tabs(
 
             // Space + name
             if !truncated.is_empty() {
+                // The active tab's name is also underlined, so it reads at a glance.
                 let bold_str = if name_bold { BOLD } else { "" };
-                let _ = write!(buf, " {bold_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
+                let ul_str = if is_active { UNDERLINE } else { "" };
+                let _ = write!(buf, " {bold_str}{ul_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
                 *col += 1 + display_width(&truncated);
             }
             // Elapsed suffix
@@ -557,7 +561,8 @@ fn render_tabs(
             // Name only (no symbol)
             if !truncated.is_empty() {
                 let bold_str = if name_bold { BOLD } else { "" };
-                let _ = write!(buf, "{bold_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
+                let ul_str = if is_active { UNDERLINE } else { "" };
+                let _ = write!(buf, "{bold_str}{ul_str}{name_fg}{truncated}{RESET}{tab_bg_str}");
                 *col += display_width(&truncated);
             }
             // Fullscreen indicator
