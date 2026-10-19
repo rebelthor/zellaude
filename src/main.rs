@@ -395,6 +395,16 @@ impl State {
             None => return,
         };
 
+        // Tabs with no meaningful pane title fall back to the latest slash command
+        // (Claude Code writes no AI title for slash-command-only sessions). The
+        // result feeds the same brakes below as any pane title.
+        let command_titles: HashMap<usize, String> = match self.pane_manifest {
+            Some(ref manifest) => {
+                tab_pane_map::pick_command_titles(manifest, &self.sessions, &title_source)
+            }
+            None => return,
+        };
+
         // Retire pending renames that have landed, or whose tab is gone. Keyed
         // by the pre-rename name, which is what we can still match on.
         let live_names: std::collections::HashSet<&str> =
@@ -422,10 +432,11 @@ impl State {
                 continue;
             }
 
-            let Some(pane_id) = title_source.get(&tab.position) else {
-                continue;
+            let title = match title_source.get(&tab.position) {
+                Some(pane_id) => titles.get(pane_id),
+                None => command_titles.get(&tab.position),
             };
-            let Some(title) = titles.get(pane_id) else {
+            let Some(title) = title else {
                 continue;
             };
             let desired = sanitize_tab_title(title);

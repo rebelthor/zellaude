@@ -78,6 +78,37 @@ pub fn pick_title_pane(candidates: &[(u32, String, u64)]) -> Option<u32> {
     best.map(|(id, _)| id)
 }
 
+/// Tab title from the latest slash command, for a tab with no pane carrying a
+/// meaningful title.
+///
+/// Claude Code writes no AI title for a session whose prompts are all slash
+/// commands, so its pane title stays the `Claude Code` placeholder and the tab
+/// would never be renamed. Each candidate is `(pane_id, last_event_ts, command)`.
+/// The most recently active pane with a command wins, ties to the lowest pane
+/// id. Returns the command as typed, e.g. `/review-requested-prs`.
+///
+/// Callers use this only after `pick_title_pane` found nothing, so a meaningful
+/// pane title always wins. The result still flows through the same rename
+/// brakes as any other title.
+pub fn pick_command_title(candidates: &[(u32, u64, Option<String>)]) -> Option<String> {
+    let mut best: Option<(u32, u64, &str)> = None;
+    for (pane_id, activity, command) in candidates {
+        let Some(command) = command.as_deref().map(str::trim).filter(|c| !c.is_empty()) else {
+            continue;
+        };
+        let better = match best {
+            None => true,
+            Some((best_id, best_activity, _)) => {
+                *activity > best_activity || (*activity == best_activity && *pane_id < best_id)
+            }
+        };
+        if better {
+            best = Some((*pane_id, *activity, command));
+        }
+    }
+    best.map(|(_, _, command)| format!("/{}", command.trim_start_matches('/')))
+}
+
 /// Whether a tab's reported position can be trusted enough to address a
 /// `rename_tab` call at it.
 ///
@@ -200,6 +231,49 @@ mod tests {
         // A busy pane with no OSC title must not suppress a quiet titled pane.
         let candidates = vec![(1, "".to_string(), 999), (2, "real title".to_string(), 0)];
         assert_eq!(pick_title_pane(&candidates), Some(2));
+    }
+
+    #[test]
+    fn command_titles_the_tab_as_typed() {
+        let candidates = vec![(3, 10, Some("review-requested-prs".to_string()))];
+        assert_eq!(
+            pick_command_title(&candidates),
+            Some("/review-requested-prs".to_string())
+        );
+    }
+
+    #[test]
+    fn no_command_means_no_fallback_title() {
+        let candidates = vec![(1, 99, None), (2, 5, Some("  ".to_string()))];
+        assert_eq!(pick_command_title(&candidates), None);
+        assert_eq!(pick_command_title(&[]), None);
+    }
+
+    #[test]
+    fn most_recent_command_wins_then_lowest_pane_id() {
+        let candidates = vec![
+            (1, 100, Some("old".to_string())),
+            (2, 200, Some("new".to_string())),
+            (3, 200, Some("tie".to_string())),
+        ];
+        assert_eq!(pick_command_title(&candidates), Some("/new".to_string()));
+        // A pane without a command never beats one with, whatever its activity.
+        let candidates = vec![(1, 999, None), (2, 1, Some("cmd".to_string()))];
+        assert_eq!(pick_command_title(&candidates), Some("/cmd".to_string()));
+    }
+
+    #[test]
+    fn a_meaningful_title_means_the_command_is_not_consulted() {
+        // The caller order: pick_title_pane first, command only when it is None.
+        let titles = vec![
+            (1, "✳ Claude Code".to_string(), 5),
+            (2, "Real task name".to_string(), 1),
+        ];
+        assert_eq!(pick_title_pane(&titles), Some(2));
+        let placeholders = vec![(1, "✳ Claude Code".to_string(), 5)];
+        assert_eq!(pick_title_pane(&placeholders), None);
+        let commands = vec![(1, 5, Some("review-requested-prs".to_string()))];
+        assert!(pick_command_title(&commands).is_some());
     }
 
     #[test]

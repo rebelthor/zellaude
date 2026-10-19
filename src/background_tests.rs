@@ -161,3 +161,42 @@ fn snapshot_sets_closed_only_after_the_last_foreground_event() {
     snap(&mut state, 400, false);
     assert!(!state.sessions[&1].closed);
 }
+
+fn prompt(state: &mut State, session: &str, ts: u64, command: Option<&str>) {
+    let payload: HookPayload = serde_json::from_value(json!({
+        "pane_id": 1, "session_id": session, "hook_event": "UserPromptSubmit",
+        "ts_ms": ts, "command": command
+    })).unwrap();
+    handle_hook_event(state, payload);
+}
+
+#[test]
+fn slash_command_is_stored_and_survives_typed_prompts() {
+    let mut state = State::default();
+    prompt(&mut state, "s1", 100, Some("review-requested-prs"));
+    assert_eq!(state.sessions[&1].command.as_deref(), Some("review-requested-prs"));
+    // A typed prompt (command null) keeps it; the AI title takes over via the pane title.
+    prompt(&mut state, "s1", 200, None);
+    assert_eq!(state.sessions[&1].command.as_deref(), Some("review-requested-prs"));
+    prompt(&mut state, "s1", 300, Some("other"));
+    assert_eq!(state.sessions[&1].command.as_deref(), Some("other"));
+}
+
+#[test]
+fn command_resets_for_a_new_session_in_the_same_pane() {
+    let mut state = State::default();
+    prompt(&mut state, "s1", 100, Some("review-requested-prs"));
+    event(&mut state, "SessionStart", 200, "s1", None);
+    assert_eq!(state.sessions[&1].command, None);
+    prompt(&mut state, "s1", 300, Some("x"));
+    event(&mut state, "PreToolUse", 400, "s2", None);
+    assert_eq!(state.sessions[&1].command, None);
+}
+
+#[test]
+fn older_payloads_without_command_still_deserialize() {
+    let payload: HookPayload = serde_json::from_value(json!({
+        "pane_id": 1, "session_id": "s", "hook_event": "UserPromptSubmit"
+    })).unwrap();
+    assert_eq!(payload.command, None);
+}

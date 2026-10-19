@@ -62,6 +62,32 @@ pub fn pick_title_panes(
     chosen
 }
 
+/// Slash-command fallback titles, per tab index, for tabs with no pane in
+/// `title_source` (that is, no meaningful pane title). A meaningful pane title
+/// always wins because such tabs are never looked at here.
+pub fn pick_command_titles(
+    manifest: &PaneManifest,
+    sessions: &std::collections::BTreeMap<u32, crate::state::SessionInfo>,
+    title_source: &HashMap<usize, u32>,
+) -> HashMap<usize, String> {
+    let mut chosen = HashMap::new();
+    for (&tab_index, panes) in &manifest.panes {
+        if title_source.contains_key(&tab_index) {
+            continue;
+        }
+        let candidates: Vec<(u32, u64, Option<String>)> = panes
+            .iter()
+            .filter(|pane| !pane.is_plugin)
+            .filter_map(|pane| sessions.get(&pane.id))
+            .map(|s| (s.pane_id, s.last_event_ts, s.command.clone()))
+            .collect();
+        if let Some(title) = crate::rename_guard::pick_command_title(&candidates) {
+            chosen.insert(tab_index, title);
+        }
+    }
+    chosen
+}
+
 /// Build a mapping from terminal pane_id -> the pane's current title (the OSC
 /// title set by the running program, as it appears in the UI).
 pub fn build_pane_titles(manifest: &PaneManifest) -> HashMap<u32, String> {

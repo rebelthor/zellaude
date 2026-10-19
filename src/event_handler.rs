@@ -103,7 +103,7 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
             last_ts_ms: 0,
             background: Default::default(),
             background_ts_ms: 0,
-            color: None, closed: false,
+            color: None, closed: false, command: None,
         });
 
     if matches!(activity, Activity::Waiting) {
@@ -128,6 +128,19 @@ pub fn handle_hook_event(state: &mut State, payload: HookPayload) {
     if event == "SessionStart" {
         session.background = Default::default();
         session.background_ts_ms = 0;
+    }
+    // A command belongs to one Claude session; a new session in the same pane starts clean.
+    let new_session = payload
+        .session_id
+        .as_deref()
+        .is_some_and(|sid| !session.session_id.is_empty() && sid != session.session_id);
+    if event == "SessionStart" || new_session {
+        session.command = None;
+    }
+    if event == "UserPromptSubmit" {
+        if let Some(command) = payload.command.filter(|c| !c.is_empty()) {
+            session.command = Some(command);
+        }
     }
     session.activity = activity;
     // Safe to close only as of the turn's end; any later event means work resumed.

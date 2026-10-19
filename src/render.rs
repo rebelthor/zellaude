@@ -758,7 +758,7 @@ mod background_render_tests {
                 session_id: pane.to_string(), pane_id: pane, activity,
                 tab_name: None, tab_index: Some(0), last_event_ts: 0,
                 cwd: None, last_ts_ms: 0, background, background_ts_ms: 0,
-                color: None, closed: false,
+                color: None, closed: false, command: None,
             });
         }
         for width in 1..80 {
@@ -785,7 +785,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Done,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("green".into()), closed: false,
+            color: Some("green".into()), closed: false, command: None,
         });
         let mut buf = String::new();
         let mut col = 0;
@@ -827,7 +827,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Waiting,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()), closed: false,
+            color: Some("blue".into()), closed: false, command: None,
         });
         let mut buf = String::new();
         let mut col = 0;
@@ -849,7 +849,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Tool("Bash".into()),
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()), closed: false,
+            color: Some("blue".into()), closed: false, command: None,
         });
         let tip = format!("{}{}{SEPARATOR}", fg(255, 170, 50), bg(BAR_BG.0, BAR_BG.1, BAR_BG.2));
         let mut buf = String::new();
@@ -873,7 +873,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Done,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()), closed: false,
+            color: Some("blue".into()), closed: false, command: None,
         });
         let tip = format!("{}{}{SEPARATOR}", fg(BACKGROUND_TIP.0, BACKGROUND_TIP.1, BACKGROUND_TIP.2), bg(BAR_BG.0, BAR_BG.1, BAR_BG.2));
         let render = |state: &mut State| {
@@ -899,7 +899,7 @@ mod background_render_tests {
             session_id: "1".into(), pane_id: 1, activity: Activity::Done,
             tab_name: None, tab_index: Some(0), last_event_ts: 0,
             cwd: None, last_ts_ms: 0, background: Default::default(), background_ts_ms: 0,
-            color: Some("blue".into()), closed: true,
+            color: Some("blue".into()), closed: true, command: None,
         });
         let mut buf = String::new();
         let mut col = 0;

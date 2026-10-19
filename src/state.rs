@@ -60,6 +60,10 @@ pub struct SessionInfo {
     /// The session was wrapped up as safe to close; cleared by its next event.
     #[serde(default)]
     pub closed: bool,
+    /// Latest slash command name (no leading `/`) typed in this session. Tab title fallback
+    /// when the pane has no meaningful OSC title. Typed non-slash prompts leave it alone.
+    #[serde(default)]
+    pub command: Option<String>,
 }
 
 impl SessionInfo {
@@ -118,6 +122,9 @@ pub struct HookPayload {
     /// Safe to close, from a Stop hook or a background snapshot; absent from older senders.
     #[serde(default)]
     pub closed: Option<bool>,
+    /// Slash command name from a UserPromptSubmit; absent from older senders.
+    #[serde(default)]
+    pub command: Option<String>,
 }
 
 /// A tab rename zellaude has issued but not yet seen reflected in a TabUpdate.

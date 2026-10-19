@@ -23,6 +23,13 @@ TOOL_NAME=$(echo "$INPUT" | jq -r '.tool_name // empty')
 CWD=$(echo "$INPUT" | jq -r '.cwd // empty')
 TRANSCRIPT=$(echo "$INPUT" | jq -r '.transcript_path // empty')
 
+# Slash command name on UserPromptSubmit (the prompt arrives as raw `/name args` text). The plugin
+# names the tab after it when Claude Code writes no AI title, as with slash-command-only sessions.
+COMMAND=""
+if [ "$HOOK_EVENT" = "UserPromptSubmit" ]; then
+  COMMAND=$(echo "$INPUT" | jq -r '(.prompt // "") | capture("^\\s*/(?<name>[A-Za-z0-9][A-Za-z0-9:_.-]*)(\\s|$)") | .name // empty' 2>/dev/null)
+fi
+
 # Session color from /color. Claude Code re-appends an agent-color entry to the
 # transcript every few turns, so the tail is enough even for huge transcripts.
 COLOR=""
@@ -55,6 +62,7 @@ PAYLOAD=$(jq -nc \
   --arg tool_name "$TOOL_NAME" \
   --arg cwd "$CWD" \
   --arg color "$COLOR" \
+  --arg command "$COMMAND" \
   --arg zellij_session "$ZELLIJ_SESSION_NAME" \
   --arg term_program "${TERM_PROGRAM:-}" \
   --arg ts_ms "$TS_MS" \
@@ -66,6 +74,7 @@ PAYLOAD=$(jq -nc \
     tool_name: (if $tool_name == "" then null else $tool_name end),
     cwd: (if $cwd == "" then null else $cwd end),
     color: (if $color == "" then null else $color end),
+    command: (if $command == "" then null else $command end),
     zellij_session: $zellij_session,
     term_program: (if $term_program == "" then null else $term_program end),
     ts_ms: ($ts_ms | tonumber),
